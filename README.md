@@ -110,7 +110,83 @@ inv/
 ├── stock_screener_paris.py # autre script (screener Boursorama)
 ├── requirements.txt
 ├── .gitignore
+├── portefeuille/           # application web Portefeuille (cf. ci-dessous)
 └── README.md
 ```
 
 La base SQLite n'est pas dans ce dossier ; elle est attendue à `/home/aurelien/dev/div/db/per_analysis.db`.
+
+---
+
+## Application web Portefeuille
+
+Petite application Flask (+ HTML/CSS/JS vanilla) servie depuis le sous-dossier
+[`portefeuille/`](portefeuille/). Elle affiche le contenu de la table `wallet`
+enrichi de :
+
+- le nom de l'action (jointure sur `stocks.isin`),
+- le dernier cours connu et sa date (table `pricing`, `MAX(date)` par ISIN),
+- la valorisation courante, la +/- value, la performance et le PER,
+- la liquidité (table `walletDetails`),
+- un tableau de synthèse (Valeur achat, Date valorisation, Valorisation,
+  Dividendes, Liquidité, +/- Value, Perf).
+
+Coloration des lignes en fonction du PER courant :
+
+- vert si `0 ≤ PER ≤ 10`
+- rouge si `PER > 10` ou `PER < 0`
+
+La base SQLite est ouverte en **lecture seule** (`mode=ro`).
+
+### Installation
+
+Depuis le venv déjà présent dans `inv/` :
+
+```bash
+cd /home/aurelien/dev/div/inv
+source bin/activate
+pip install -r portefeuille/requirements.txt
+```
+
+### Lancement
+
+```bash
+cd /home/aurelien/dev/div/inv/portefeuille
+python app.py
+```
+
+Puis ouvrir <http://127.0.0.1:5001/>.
+
+Variables d'environnement optionnelles :
+
+- `PORTEFEUILLE_DB` — chemin de la base SQLite
+  (défaut : `/home/aurelien/dev/div/db/per_analysis.db`)
+- `PORT` — port HTTP (défaut : `5001`)
+
+Exemple avec un autre port :
+
+```bash
+PORT=5057 python app.py
+```
+
+### Endpoints API
+
+- `GET /` — page HTML (écran « Portefeuille »).
+- `GET /api/wallet` — tableau JSON des lignes du portefeuille (nom, ISIN,
+  quantité, dates et prix d'achat, dividendes, dernier cours, +/- value,
+  perf, PER, etc.).
+- `GET /api/liquidite` — `{"liquidite": <valeur>}` (table `walletDetails`).
+
+### Détail des fichiers
+
+```
+portefeuille/
+├── app.py                  # API Flask + service de la page
+├── requirements.txt        # Flask>=3.0
+├── README.md               # README dédié (plus détaillé)
+├── templates/
+│   └── index.html          # page « Portefeuille »
+└── static/
+    ├── styles.css
+    └── app.js              # tri, filtre, tableau de synthèse
+```

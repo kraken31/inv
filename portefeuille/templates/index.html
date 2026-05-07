@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Portefeuille</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Portefeuille</h1>
+  </header>
+
+  <main>
+    <section class="toolbar">
+      <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
+      <button id="reload" type="button">Actualiser</button>
+    </section>
+
+    <div id="status" class="status"></div>
+
+    <table id="summary-table" class="wallet summary-table">
+      <thead>
+        <tr>
+          <th class="num">Valeur achat</th>
+          <th>Date valorisation</th>
+          <th class="num">Valorisation</th>
+          <th class="num">Dividendes</th>
+          <th class="num">Liquidité</th>
+          <th class="num">+/- Value</th>
+          <th class="num">Perf</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num" id="s-purchase"></td>
+          <td id="s-date"></td>
+          <td class="num" id="s-current"></td>
+          <td class="num" id="s-dividend"></td>
+          <td class="num" id="s-liquidite"></td>
+          <td class="num" id="s-plus-minus"></td>
+          <td class="num" id="s-perf"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table id="wallet-table" class="wallet">
+      <thead>
+        <tr>
+          <th data-key="name" class="sort">Nom</th>
+          <th data-key="quantity" class="sort num">Quantité</th>
+          <th data-key="purchase_date" class="sort">Date achat</th>
+          <th data-key="purchase_price" class="sort num">Prix achat</th>
+          <th data-key="purchase_amount" class="sort num">Montant achat</th>
+          <th data-key="dividend" class="sort num">Dividende</th>
+          <th data-key="current_date" class="sort">Date</th>
+          <th data-key="current_price" class="sort num">Prix</th>
+          <th data-key="current_amount" class="sort num">Montant</th>
+          <th data-key="perf_div" class="sort num">Perf Div</th>
+          <th data-key="plus_minus_value" class="sort num">+/- Value</th>
+          <th data-key="perf" class="sort num">Perf</th>
+          <th data-key="per" class="sort num">PER</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
