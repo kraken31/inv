@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments (le venv est cree directement a la racine du projet)
+.venv/
+venv/
+env/
+ENV/
+bin/
+include/
+lib/
+lib64
+pyvenv.cfg
+
+# IDE / editeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+.cursor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs et sorties
+*.log
+*.out
+
+# Donnees locales (la base SQLite est volumineuse et hors repo, mais au cas ou)
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+
+# Fichiers WSL/Windows
+*:Zone.Identifier
+
+# Variables d'environnement
+.env
+.env.local

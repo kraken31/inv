@@ -1,0 +1,3 @@
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+# Utilise Firefox (geckodriver) pour éviter les erreurs Chrome/DevTools sous WSL
