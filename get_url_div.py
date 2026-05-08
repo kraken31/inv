@@ -22,17 +22,14 @@ service = Service(executable_path=r'/usr/bin/chromedriver')
 driver = webdriver.Chrome(service=service, options=options)
 
 
-# DB (read-only)
-db = sqlite3.connect(
-    'file:/home/aurelien/dev/div/db/per_analysis.db?mode=ro',
-    uri=True,
-)
+# DB
+db = sqlite3.connect('/home/aurelien/dev/div/db/per_analysis.db')
 isins = [
     row[0].strip()
     for row in db.execute(
         "SELECT isin2 FROM stocks "
         "WHERE isin2 IS NOT NULL AND TRIM(isin2) != ''"
-    )
+    ).fetchall()
 ]
 
 
@@ -68,11 +65,20 @@ try:
             )
             equity_url = first.get_attribute("href")
             dividends_url = equity_url.rstrip('/') + "-dividends"
+            db.execute(
+                "UPDATE stocks SET url_dividend = ? WHERE isin2 = ?",
+                (dividends_url, isin),
+            )
             print(isin, dividends_url)
         except Exception:
+            db.execute(
+                "UPDATE stocks SET url_dividend = NULL WHERE isin2 = ?",
+                (isin,),
+            )
             print(isin, "NOT_FOUND")
 
         time.sleep(0.5)
 finally:
     driver.quit()
+    db.commit()
     db.close()
