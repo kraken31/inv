@@ -50,6 +50,33 @@ html, body {
   font-size: 14px;
 }
 
+.nav {
+  display: flex;
+  gap: 8px;
+}
+
+.nav a {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.nav a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.nav a.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.15), rgba(34, 211, 238, 0.15));
+}
+
 main {
   padding: 20px 32px 48px;
   max-width: 1200px;

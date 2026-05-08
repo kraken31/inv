@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PER</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>PER</h1>
+    <nav class="nav">
+      <a href="{{ url_for('index') }}">Portefeuille</a>
+      <a href="{{ url_for('per_page') }}" class="active">PER</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="toolbar">
+      <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
+      <button id="reload" type="button">Actualiser</button>
+    </section>
+
+    <div id="status" class="status"></div>
+
+    <table id="per-table" class="wallet">
+      <thead>
+        <tr>
+          <th data-key="name" class="sort">Nom</th>
+          <th data-key="date" class="sort">Date</th>
+          <th data-key="per" class="sort num">PER</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <script src="{{ url_for('static', filename='per.js') }}"></script>
+</body>
+</html>

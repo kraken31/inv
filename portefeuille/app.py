@@ -33,6 +33,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/per")
+def per_page():
+    return render_template("per.html")
+
+
 @app.route("/api/wallet")
 def api_wallet():
     query = """
@@ -71,6 +76,46 @@ def api_wallet():
         LEFT JOIN stocks s       ON s.isin = w.isin
         LEFT JOIN latest_price lp ON lp.isin = w.isin
         ORDER BY name COLLATE NOCASE
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify(rows)
+
+
+@app.route("/api/per")
+def api_per():
+    query = """
+        WITH latest_per AS (
+            SELECT p.isin, p.date, p.per
+            FROM pricing p
+            JOIN (
+                SELECT isin, MAX(date) AS max_date
+                FROM pricing
+                WHERE per IS NOT NULL
+                GROUP BY isin
+            ) m ON m.isin = p.isin AND m.max_date = p.date
+        ),
+        overall AS (
+            SELECT MAX(date) AS max_date FROM latest_per
+        )
+        SELECT
+            COALESCE(s.name, lp.isin) AS name,
+            lp.isin                   AS isin,
+            lp.date                   AS date,
+            lp.per                    AS per
+        FROM latest_per lp
+        CROSS JOIN overall o
+        LEFT JOIN stocks s ON s.isin = lp.isin
+        WHERE lp.per > 0
+          AND lp.per < 10
+          AND lp.date >= date(o.max_date, '-7 days')
+        ORDER BY lp.per ASC
     """
     try:
         with get_db() as conn:
