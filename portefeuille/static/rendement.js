@@ -68,6 +68,10 @@ function formatNum(v) {
   return v != null && !Number.isNaN(v) ? nfNum.format(v) : "";
 }
 
+function formatPct(v) {
+  return v != null && !Number.isNaN(v) ? `${nfNum.format(v)}\u00A0%` : "";
+}
+
 function render() {
   tbody.innerHTML = "";
   for (const r of state.filtered) {
@@ -81,13 +85,13 @@ function render() {
       <td>${escapeHtml(r.name)}</td>
       <td class="num">${formatNum(r.per)}</td>
       <td class="num">${formatNum(r.dividend)}</td>
-      <td class="num">${formatNum(r.rendement)}</td>
+      <td class="num">${formatPct(r.rendement)}</td>
       <td class="num">${formatNum(r.dividend_prev)}</td>
-      <td class="num">${formatNum(r.rendement_prev)}</td>
+      <td class="num">${formatPct(r.rendement_prev)}</td>
       <td class="num">${formatNum(r.dividend_avg5)}</td>
-      <td class="num">${formatNum(r.rendement_avg5)}</td>
+      <td class="num">${formatPct(r.rendement_avg5)}</td>
       <td class="num">${formatNum(r.dividend_avg10)}</td>
-      <td class="num">${formatNum(r.rendement_avg10)}</td>
+      <td class="num">${formatPct(r.rendement_avg10)}</td>
     `;
     tbody.appendChild(tr);
   }
