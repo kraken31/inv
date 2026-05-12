@@ -80,6 +80,58 @@ html, body {
   background: linear-gradient(90deg, rgba(56, 189, 248, 0.15), rgba(34, 211, 238, 0.15));
 }
 
+.nav-action {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.nav-action:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.nav-action:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.nav-action.running {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.nav-status {
+  align-self: center;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 10ch;
+  max-width: 32ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-status.success { color: var(--pos); }
+.nav-status.error   { color: var(--neg); }
+.nav-status.log {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.nav .nav-status + a {
+  margin-left: 16px;
+  padding-left: 22px;
+  border-left: 1px solid var(--border);
+}
+
 main {
   padding: 20px 32px 48px;
   max-width: 1200px;

@@ -6,6 +6,10 @@ API Flask qui lit la table `wallet` (jointure sur `stocks` via la colonne
 
 import os
 import sqlite3
+import subprocess
+import sys
+import threading
+import time
 from datetime import date
 from pathlib import Path
 
@@ -17,7 +21,50 @@ DB_PATH = os.environ.get(
     "/home/aurelien/dev/div/inv/inv.db",
 )
 
+# Répertoire racine où vivent les scripts de refresh (get_pricing.py,
+# get_dividends.py, …). Résolu relativement à app.py pour rester
+# portable.
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent
+
 app = Flask(__name__)
+
+
+# Registry des jobs de refresh exposés par /api/refresh/<job>. Pour
+# ajouter un nouveau script (par ex. get_results.py), il suffit d'ajouter
+# une entrée ici et de placer un bouton dans la nav.
+#
+# Chaque job possède un état partagé manipulé sous son propre lock :
+#   - process     : subprocess.Popen en cours, ou None
+#   - started_at  : epoch seconds (float) ou None
+#   - finished_at : epoch seconds (float) ou None
+#   - exit_code   : int (0 = succès, autre = échec) ou None tant que
+#                   pas terminé
+#   - log_path    : chemin du fichier de logs du dernier run
+#
+# Les jobs tournent indépendamment : on peut lancer get_pricing.py et
+# get_dividends.py en parallèle. Chacun gère son propre rate-limit Yahoo.
+def _new_state() -> dict:
+    return {
+        "process": None,
+        "started_at": None,
+        "finished_at": None,
+        "exit_code": None,
+        "log_path": None,
+    }
+
+
+_REFRESH_JOBS: dict[str, dict] = {
+    "pricing": {
+        "script": SCRIPTS_DIR / "get_pricing.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
+    "dividends": {
+        "script": SCRIPTS_DIR / "get_dividends.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
+}
 
 
 def get_db() -> sqlite3.Connection:
@@ -283,6 +330,116 @@ def api_liquidite():
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
 
     return jsonify({"liquidite": row["liquidite"] if row else None})
+
+
+def _last_log_line(path: str | None) -> str | None:
+    """Retourne la dernière ligne non vide du fichier de log, ou None
+    si pas de log lisible / fichier vide. Lecture intégrale (le fichier
+    fait au plus quelques centaines de Ko sur un run get_pricing.py
+    complet, c'est négligeable).
+    """
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            content = f.read()
+    except OSError:
+        return None
+    content = content.rstrip()
+    if not content:
+        return None
+    return content.rsplit("\n", 1)[-1]
+
+
+def _job_status_dict(job_name: str) -> dict:
+    """Renvoie un dict JSON-sérialisable décrivant l'état du dernier
+    refresh du job `job_name`. Doit être appelé sous le lock du job.
+    Met à jour exit_code / finished_at si le subprocess vient juste
+    de se terminer. Inclut `last_log` (dernière ligne du log) tant que
+    le subprocess tourne.
+    """
+    state = _REFRESH_JOBS[job_name]["state"]
+    proc = state["process"]
+    running = False
+    if proc is not None:
+        rc = proc.poll()
+        if rc is None:
+            running = True
+        elif state["exit_code"] is None:
+            # Premier check après terminaison : on enregistre le code
+            # et l'heure de fin une seule fois.
+            state["exit_code"] = rc
+            state["finished_at"] = time.time()
+    return {
+        "job": job_name,
+        "running": running,
+        "started_at": state["started_at"],
+        "finished_at": state["finished_at"],
+        "exit_code": state["exit_code"],
+        "log_path": state["log_path"],
+        "last_log": (
+            _last_log_line(state["log_path"]) if running else None
+        ),
+    }
+
+
+@app.route("/api/refresh/<job>", methods=["GET"])
+def api_refresh_status(job: str):
+    """Retourne l'état du dernier refresh du job demandé."""
+    cfg = _REFRESH_JOBS.get(job)
+    if cfg is None:
+        return jsonify({"error": f"Job inconnu: {job}"}), 404
+    with cfg["lock"]:
+        return jsonify(_job_status_dict(job))
+
+
+@app.route("/api/refresh/<job>", methods=["POST"])
+def api_refresh_start(job: str):
+    """Lance le script associé au job en sous-process si aucun refresh
+    de ce même job n'est déjà en cours. Ne bloque pas. Renvoie 202 +
+    état si démarré, 409 + état si déjà en cours, 404 si job inconnu,
+    500 si le script est introuvable.
+    """
+    cfg = _REFRESH_JOBS.get(job)
+    if cfg is None:
+        return jsonify({"error": f"Job inconnu: {job}"}), 404
+
+    script: Path = cfg["script"]
+    if not script.exists():
+        return jsonify({"error": f"Script introuvable: {script}"}), 500
+
+    with cfg["lock"]:
+        status = _job_status_dict(job)
+        if status["running"]:
+            return (
+                jsonify({"error": "Refresh déjà en cours", **status}),
+                409,
+            )
+
+        log_path = (
+            f"/tmp/{script.stem}-{time.strftime('%Y%m%dT%H%M%S')}.log"
+        )
+        # Ouvre le log en parent ; le child hérite du fd, on peut
+        # refermer côté parent immédiatement après le spawn.
+        log_file = open(log_path, "w")
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, str(script)],
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(script.parent),
+            )
+        finally:
+            log_file.close()
+
+        state = cfg["state"]
+        state["process"] = proc
+        state["started_at"] = time.time()
+        state["finished_at"] = None
+        state["exit_code"] = None
+        state["log_path"] = log_path
+
+        return jsonify(_job_status_dict(job)), 202
 
 
 if __name__ == "__main__":

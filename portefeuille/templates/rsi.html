@@ -10,6 +10,16 @@
   <header class="topbar">
     <h1>RSI &lt; 30</h1>
     <nav class="nav">
+      <button id="refresh-pricing" type="button" class="nav-action"
+              title="Lance get_pricing.py pour rafraîchir les cours">
+        ↻ Cours
+      </button>
+      <span id="refresh-pricing-status" class="nav-status"></span>
+      <button id="refresh-dividends" type="button" class="nav-action"
+              title="Lance get_dividends.py pour rafraîchir les dividendes">
+        ↻ Dividendes
+      </button>
+      <span id="refresh-dividends-status" class="nav-status"></span>
       <a href="{{ url_for('index') }}">Portefeuille</a>
       <a href="{{ url_for('per_page') }}">PER</a>
       <a href="{{ url_for('rsi_page') }}" class="active">RSI</a>
@@ -38,5 +48,6 @@
   </main>
 
   <script src="{{ url_for('static', filename='rsi.js') }}"></script>
+  <script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>
 </html>
