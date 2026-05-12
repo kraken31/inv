@@ -20,14 +20,20 @@
         ↻ Dividendes
       </button>
       <span id="refresh-dividends-status" class="nav-status"></span>
-      <a href="{{ url_for('index') }}">Portefeuille</a>
-      <a href="{{ url_for('per_page') }}">PER</a>
-      <a href="{{ url_for('rsi_page') }}">RSI</a>
-      <a href="{{ url_for('rendement_page') }}" class="active">Rendement</a>
     </nav>
   </header>
 
-  <main>
+  <div class="layout">
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <a href="{{ url_for('index') }}">Portefeuille</a>
+        <a href="{{ url_for('per_page') }}">PER</a>
+        <a href="{{ url_for('rsi_page') }}">RSI</a>
+        <a href="{{ url_for('rendement_page') }}" class="active">Rendement</a>
+      </nav>
+    </aside>
+
+    <main>
     <section class="toolbar">
       <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
       <button id="reload" type="button">Actualiser</button>
@@ -52,7 +58,8 @@
       </thead>
       <tbody></tbody>
     </table>
-  </main>
+    </main>
+  </div>
 
   <script src="{{ url_for('static', filename='rendement.js') }}"></script>
   <script src="{{ url_for('static', filename='nav.js') }}"></script>

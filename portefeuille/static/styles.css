@@ -58,8 +58,28 @@ html, body {
   gap: 8px;
 }
 
-.nav a {
-  padding: 8px 14px;
+.layout {
+  display: flex;
+  align-items: stretch;
+}
+
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  padding: 20px 16px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-nav a {
+  display: block;
+  padding: 10px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--panel-2);
@@ -69,12 +89,12 @@ html, body {
   transition: color 0.15s, border-color 0.15s;
 }
 
-.nav a:hover {
+.sidebar-nav a:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
 
-.nav a.active {
+.sidebar-nav a.active {
   color: var(--text);
   border-color: var(--accent);
   background: linear-gradient(90deg, rgba(56, 189, 248, 0.15), rgba(34, 211, 238, 0.15));
@@ -126,16 +146,10 @@ html, body {
   color: var(--text);
 }
 
-.nav .nav-status + a {
-  margin-left: 16px;
-  padding-left: 22px;
-  border-left: 1px solid var(--border);
-}
-
 main {
+  flex: 1;
+  min-width: 0;
   padding: 20px 32px 48px;
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 .toolbar {
