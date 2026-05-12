@@ -1,7 +1,7 @@
 # Portefeuille
 
 Petite application web (Flask + HTML/JS vanilla) qui affiche le contenu de la
-table `wallet` de la base SQLite `/home/aurelien/dev/div/db/per_analysis.db`,
+table `wallet` de la base SQLite `/home/aurelien/dev/div/inv/inv.db`,
 enrichi du nom de l'action (jointure sur la table `stocks` via la colonne
 `isin`).
 
@@ -40,7 +40,7 @@ Puis ouvrir <http://127.0.0.1:5001/>.
 Variables d'environnement optionnelles :
 
 - `PORTEFEUILLE_DB` : chemin de la base SQLite
-  (défaut `/home/aurelien/dev/div/db/per_analysis.db`)
+  (défaut `/home/aurelien/dev/div/inv/inv.db`)
 - `PORT` : port HTTP (défaut `5001`)
 
 ## API

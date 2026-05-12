@@ -1,3 +1,5 @@
 selenium>=4.15.0
 webdriver-manager>=4.0.0
-# Utilise Firefox (geckodriver) pour éviter les erreurs Chrome/DevTools sous WSL
+yfinance>=0.2
+# get_div.py utilise yfinance (Yahoo Finance) pour l'historique des dividendes.
+# Selenium reste utilisé par d'autres scripts (URLs, scraping ponctuel).

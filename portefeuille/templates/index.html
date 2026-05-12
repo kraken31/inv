@@ -12,6 +12,8 @@
     <nav class="nav">
       <a href="{{ url_for('index') }}" class="active">Portefeuille</a>
       <a href="{{ url_for('per_page') }}">PER</a>
+      <a href="{{ url_for('rsi_page') }}">RSI</a>
+      <a href="{{ url_for('rendement_page') }}">Rendement</a>
     </nav>
   </header>
 
@@ -64,6 +66,7 @@
           <th data-key="plus_minus_value" class="sort num">+/- Value</th>
           <th data-key="perf" class="sort num">Perf</th>
           <th data-key="per" class="sort num">PER</th>
+          <th data-key="rsi" class="sort num">RSI</th>
         </tr>
       </thead>
       <tbody></tbody>

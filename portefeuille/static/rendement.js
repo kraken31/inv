@@ -1,17 +1,17 @@
 const state = {
   rows: [],
   filtered: [],
-  sortKey: "per",
-  sortDir: "asc",
+  sortKey: "rendement",
+  sortDir: "desc",
   query: "",
 };
 
-const tbody = document.querySelector("#per-table tbody");
+const tbody = document.querySelector("#rendement-table tbody");
 const statusEl = document.getElementById("status");
 const searchEl = document.getElementById("search");
 const reloadEl = document.getElementById("reload");
 
-const nfPct = new Intl.NumberFormat("fr-FR", {
+const nfNum = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
@@ -24,11 +24,16 @@ function setStatus(msg, isError = false) {
 function compare(a, b, key, dir) {
   const va = a[key];
   const vb = b[key];
+  const aNull = va == null || Number.isNaN(va);
+  const bNull = vb == null || Number.isNaN(vb);
+  if (aNull && bNull) return 0;
+  if (aNull) return 1;
+  if (bNull) return -1;
   let cmp;
   if (typeof va === "number" && typeof vb === "number") {
     cmp = va - vb;
   } else {
-    cmp = String(va ?? "").localeCompare(String(vb ?? ""), "fr", {
+    cmp = String(va).localeCompare(String(vb), "fr", {
       numeric: true,
       sensitivity: "base",
     });
@@ -49,12 +54,6 @@ function applyFilterSort() {
   render();
 }
 
-function formatDate(s) {
-  if (!s) return "";
-  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
-}
-
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;",
@@ -65,19 +64,30 @@ function escapeHtml(s) {
   }[c]));
 }
 
+function formatNum(v) {
+  return v != null && !Number.isNaN(v) ? nfNum.format(v) : "";
+}
+
 function render() {
   tbody.innerHTML = "";
   for (const r of state.filtered) {
     const tr = document.createElement("tr");
     const per = r.per;
     if (per != null && !Number.isNaN(per)) {
-      if (per >= 0 && per <= 10) tr.classList.add("row-good");
-      else tr.classList.add("row-bad");
+      if (per > 0 && per < 10) tr.classList.add("row-good");
+      else if (per >= 10 || per <= 0) tr.classList.add("row-bad");
     }
     tr.innerHTML = `
       <td>${escapeHtml(r.name)}</td>
-      <td>${escapeHtml(formatDate(r.date))}</td>
-      <td class="num">${r.per != null ? nfPct.format(r.per) : ""}</td>
+      <td class="num">${formatNum(r.per)}</td>
+      <td class="num">${formatNum(r.dividend)}</td>
+      <td class="num">${formatNum(r.rendement)}</td>
+      <td class="num">${formatNum(r.dividend_prev)}</td>
+      <td class="num">${formatNum(r.rendement_prev)}</td>
+      <td class="num">${formatNum(r.dividend_avg5)}</td>
+      <td class="num">${formatNum(r.rendement_avg5)}</td>
+      <td class="num">${formatNum(r.dividend_avg10)}</td>
+      <td class="num">${formatNum(r.rendement_avg10)}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -91,7 +101,7 @@ function render() {
 async function loadData() {
   setStatus("Chargement…");
   try {
-    const resp = await fetch("/api/per");
+    const resp = await fetch("/api/rendement");
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
@@ -111,7 +121,7 @@ document.querySelectorAll("th.sort").forEach((th) => {
       state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
     } else {
       state.sortKey = key;
-      state.sortDir = "asc";
+      state.sortDir = key === "name" ? "asc" : "desc";
     }
     applyFilterSort();
   });

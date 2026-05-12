@@ -1,12 +1,12 @@
 const state = {
   rows: [],
   filtered: [],
-  sortKey: "per",
+  sortKey: "rsi",
   sortDir: "asc",
   query: "",
 };
 
-const tbody = document.querySelector("#per-table tbody");
+const tbody = document.querySelector("#rsi-table tbody");
 const statusEl = document.getElementById("status");
 const searchEl = document.getElementById("search");
 const reloadEl = document.getElementById("reload");
@@ -14,6 +14,11 @@ const reloadEl = document.getElementById("reload");
 const nfPct = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+});
+
+const nfRsi = new Intl.NumberFormat("fr-FR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
 });
 
 function setStatus(msg, isError = false) {
@@ -49,12 +54,6 @@ function applyFilterSort() {
   render();
 }
 
-function formatDate(s) {
-  if (!s) return "";
-  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
-}
-
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;",
@@ -71,13 +70,13 @@ function render() {
     const tr = document.createElement("tr");
     const per = r.per;
     if (per != null && !Number.isNaN(per)) {
-      if (per >= 0 && per <= 10) tr.classList.add("row-good");
+      if (per > 0 && per < 10) tr.classList.add("row-good");
       else tr.classList.add("row-bad");
     }
     tr.innerHTML = `
       <td>${escapeHtml(r.name)}</td>
-      <td>${escapeHtml(formatDate(r.date))}</td>
       <td class="num">${r.per != null ? nfPct.format(r.per) : ""}</td>
+      <td class="num rsi-low">${r.rsi != null ? nfRsi.format(r.rsi) : ""}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -91,7 +90,7 @@ function render() {
 async function loadData() {
   setStatus("Chargement…");
   try {
-    const resp = await fetch("/api/per");
+    const resp = await fetch("/api/rsi");
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);

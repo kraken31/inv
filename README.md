@@ -14,7 +14,7 @@ FR0010340141 https://fr.investing.com/equities/aeroports-paris-dividends
 - Python 3.10+
 - Chromium ou Google Chrome
 - chromedriver (le script attend `/usr/bin/chromedriver` en dur, cf. `get_div.py` ligne 22)
-- Une base SQLite à `/home/aurelien/dev/div/db/per_analysis.db` contenant la table `stocks` avec une colonne `isin2`
+- Une base SQLite à `/home/aurelien/dev/div/inv/inv.db` contenant la table `stocks` avec une colonne `isin2`
 
 Installation des dépendances système (Debian/Ubuntu) :
 
@@ -114,7 +114,7 @@ inv/
 └── README.md
 ```
 
-La base SQLite n'est pas dans ce dossier ; elle est attendue à `/home/aurelien/dev/div/db/per_analysis.db`.
+La base SQLite n'est pas dans ce dossier ; elle est attendue à `/home/aurelien/dev/div/inv/inv.db`.
 
 ---
 
@@ -160,7 +160,7 @@ Puis ouvrir <http://127.0.0.1:5001/>.
 Variables d'environnement optionnelles :
 
 - `PORTEFEUILLE_DB` — chemin de la base SQLite
-  (défaut : `/home/aurelien/dev/div/db/per_analysis.db`)
+  (défaut : `/home/aurelien/dev/div/inv/inv.db`)
 - `PORT` — port HTTP (défaut : `5001`)
 
 Exemple avec un autre port :

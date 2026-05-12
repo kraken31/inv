@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PER</title>
+  <title>RSI</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body>
   <header class="topbar">
-    <h1>PER</h1>
+    <h1>RSI &lt; 30</h1>
     <nav class="nav">
       <a href="{{ url_for('index') }}">Portefeuille</a>
-      <a href="{{ url_for('per_page') }}" class="active">PER</a>
-      <a href="{{ url_for('rsi_page') }}">RSI</a>
+      <a href="{{ url_for('per_page') }}">PER</a>
+      <a href="{{ url_for('rsi_page') }}" class="active">RSI</a>
       <a href="{{ url_for('rendement_page') }}">Rendement</a>
     </nav>
   </header>
@@ -25,18 +25,18 @@
 
     <div id="status" class="status"></div>
 
-    <table id="per-table" class="wallet">
+    <table id="rsi-table" class="wallet">
       <thead>
         <tr>
           <th data-key="name" class="sort">Nom</th>
-          <th data-key="date" class="sort">Date</th>
           <th data-key="per" class="sort num">PER</th>
+          <th data-key="rsi" class="sort num">RSI</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
   </main>
 
-  <script src="{{ url_for('static', filename='per.js') }}"></script>
+  <script src="{{ url_for('static', filename='rsi.js') }}"></script>
 </body>
 </html>

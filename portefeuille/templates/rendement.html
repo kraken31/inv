@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rendement</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Rendement</h1>
+    <nav class="nav">
+      <a href="{{ url_for('index') }}">Portefeuille</a>
+      <a href="{{ url_for('per_page') }}">PER</a>
+      <a href="{{ url_for('rsi_page') }}">RSI</a>
+      <a href="{{ url_for('rendement_page') }}" class="active">Rendement</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="toolbar">
+      <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
+      <button id="reload" type="button">Actualiser</button>
+    </section>
+
+    <div id="status" class="status"></div>
+
+    <table id="rendement-table" class="wallet">
+      <thead>
+        <tr>
+          <th data-key="name" class="sort">Nom</th>
+          <th data-key="per" class="sort num">PER</th>
+          <th data-key="dividend" class="sort num">Dividende {{ year }}</th>
+          <th data-key="rendement" class="sort num">Rendement {{ year }}</th>
+          <th data-key="dividend_prev" class="sort num">Dividende {{ year_prev }}</th>
+          <th data-key="rendement_prev" class="sort num">Rendement {{ year_prev }}</th>
+          <th data-key="dividend_avg5" class="sort num">Dividende moyen 5 ans</th>
+          <th data-key="rendement_avg5" class="sort num">Rendement moyen 5 ans</th>
+          <th data-key="dividend_avg10" class="sort num">Dividende moyen 10 ans</th>
+          <th data-key="rendement_avg10" class="sort num">Rendement moyen 10 ans</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <script src="{{ url_for('static', filename='rendement.js') }}"></script>
+</body>
+</html>

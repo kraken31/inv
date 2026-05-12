@@ -28,6 +28,22 @@ function fmtPct(v) {
   return v == null || Number.isNaN(v) ? "" : `${nfPct.format(v)}\u00A0%`;
 }
 
+const nfRsi = new Intl.NumberFormat("fr-FR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+function fmtRsi(v) {
+  return v == null || Number.isNaN(v) ? "" : nfRsi.format(v);
+}
+
+function rsiClass(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  if (v < 30) return "rsi-low";
+  if (v > 70) return "rsi-high";
+  return "";
+}
+
 function signClass(v) {
   if (v == null || Number.isNaN(v)) return "";
   if (v > 0) return "pos";
@@ -61,7 +77,7 @@ function applyFilterSort() {
     if (!q) return true;
     return (
       String(r.name || "").toLowerCase().includes(q) ||
-      String(r.isin || "").toLowerCase().includes(q)
+      String(r.id || "").toLowerCase().includes(q)
     );
   });
   state.filtered.sort((a, b) => compare(a, b, state.sortKey, state.sortDir));
@@ -131,6 +147,7 @@ function render() {
       <td class="num ${signClass(r.plus_minus_value)}">${r.plus_minus_value != null ? nfEur.format(r.plus_minus_value) : ""}</td>
       <td class="num ${signClass(r.perf)}">${fmtPct(r.perf)}</td>
       <td class="num">${r.per != null ? nfPct.format(r.per) : ""}</td>
+      <td class="num ${rsiClass(r.rsi)}">${fmtRsi(r.rsi)}</td>
     `;
     tbody.appendChild(tr);
   }
