@@ -64,6 +64,11 @@ _REFRESH_JOBS: dict[str, dict] = {
         "lock": threading.Lock(),
         "state": _new_state(),
     },
+    "results": {
+        "script": SCRIPTS_DIR / "get_results.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
 }
 
 

@@ -104,3 +104,4 @@ function setupRefreshButton(buttonId, statusId, job) {
 
 setupRefreshButton("refresh-pricing", "refresh-pricing-status", "pricing");
 setupRefreshButton("refresh-dividends", "refresh-dividends-status", "dividends");
+setupRefreshButton("refresh-results", "refresh-results-status", "results");
