@@ -106,6 +106,33 @@ def rendement_page():
     )
 
 
+@app.route("/securite")
+def securite_page():
+    # On dérive l'année « n » depuis la table results : c'est la
+    # dernière année réellement présente, qui dépend de yfinance et
+    # non du calendrier. Fallback sur l'année précédente si la table
+    # est vide / illisible.
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT MAX(year) AS n FROM results"
+            ).fetchone()
+            year_n = (
+                row["n"]
+                if row and row["n"] is not None
+                else date.today().year - 1
+            )
+    except (FileNotFoundError, sqlite3.Error):
+        year_n = date.today().year - 1
+    return render_template(
+        "securite.html",
+        year_n=year_n,
+        year_n1=year_n - 1,
+        year_n2=year_n - 2,
+        year_n3=year_n - 3,
+    )
+
+
 @app.route("/api/wallet")
 def api_wallet():
     query = """
@@ -223,6 +250,7 @@ def api_rsi():
         CROSS JOIN overall o
         LEFT JOIN stocks s ON s.id = lp.id
         WHERE lp.rsi < 30
+          AND lp.per IS NOT NULL
           AND lp.date >= date(o.max_date, '-7 days')
         ORDER BY lp.rsi ASC
     """
@@ -310,6 +338,76 @@ def api_rendement():
         LEFT JOIN latest_price lp ON lp.id = s.id
         WHERE lp.per IS NOT NULL
         ORDER BY rendement DESC
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify(rows)
+
+
+@app.route("/api/securite")
+def api_securite():
+    # « Année n » = dernière année présente dans `results` (déterminée
+    # par yfinance, pas par le calendrier). On pivote les 4 dernières
+    # années par action puis on garde uniquement celles qui ont les 4
+    # exercices renseignés ET tous > 0, et dont le PER courant est
+    # dans ]0, 10[ (même fenêtre de fraîcheur que /api/per).
+    query = """
+        WITH latest_per AS (
+            SELECT p.id, p.date, p.per
+            FROM pricing p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricing
+                WHERE per IS NOT NULL
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        ),
+        overall AS (
+            SELECT MAX(date) AS max_date FROM latest_per
+        ),
+        year_n AS (
+            SELECT MAX(year) AS n FROM results
+        ),
+        results_pivot AS (
+            SELECT
+                r.id,
+                MAX(CASE WHEN r.year = y.n - 3 THEN r.result END) AS r_n3,
+                MAX(CASE WHEN r.year = y.n - 2 THEN r.result END) AS r_n2,
+                MAX(CASE WHEN r.year = y.n - 1 THEN r.result END) AS r_n1,
+                MAX(CASE WHEN r.year = y.n     THEN r.result END) AS r_n
+            FROM results r
+            CROSS JOIN year_n y
+            WHERE r.year BETWEEN y.n - 3 AND y.n
+            GROUP BY r.id
+        )
+        SELECT
+            COALESCE(s.name, lp.id)   AS name,
+            lp.id                     AS id,
+            rp.r_n3                   AS result_n3,
+            rp.r_n2                   AS result_n2,
+            rp.r_n1                   AS result_n1,
+            rp.r_n                    AS result_n,
+            lp.per                    AS per,
+            y.n                       AS year_n
+        FROM latest_per lp
+        CROSS JOIN overall o
+        CROSS JOIN year_n y
+        INNER JOIN results_pivot rp ON rp.id = lp.id
+        LEFT JOIN stocks s ON s.id = lp.id
+        WHERE lp.per > 0
+          AND lp.per < 10
+          AND lp.date >= date(o.max_date, '-7 days')
+          AND rp.r_n3 IS NOT NULL AND rp.r_n3 > 0
+          AND rp.r_n2 IS NOT NULL AND rp.r_n2 > 0
+          AND rp.r_n1 IS NOT NULL AND rp.r_n1 > 0
+          AND rp.r_n  IS NOT NULL AND rp.r_n  > 0
+        ORDER BY lp.per ASC
     """
     try:
         with get_db() as conn:

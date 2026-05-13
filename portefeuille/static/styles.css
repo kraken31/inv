@@ -237,6 +237,14 @@ table.wallet tbody tr.row-bad { background: rgba(248, 113, 113, 0.16); }
 table.wallet tbody tr.row-bad:nth-child(even) { background: rgba(248, 113, 113, 0.22); }
 table.wallet tbody tr.row-bad:hover { background: rgba(248, 113, 113, 0.30); }
 
+table.wallet tbody tr.row-warn { background: rgba(250, 204, 21, 0.18); }
+table.wallet tbody tr.row-warn:nth-child(even) { background: rgba(250, 204, 21, 0.24); }
+table.wallet tbody tr.row-warn:hover { background: rgba(250, 204, 21, 0.32); }
+
+table.wallet tbody tr.row-mid { background: rgba(251, 146, 60, 0.18); }
+table.wallet tbody tr.row-mid:nth-child(even) { background: rgba(251, 146, 60, 0.24); }
+table.wallet tbody tr.row-mid:hover { background: rgba(251, 146, 60, 0.32); }
+
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 table.summary-table {
