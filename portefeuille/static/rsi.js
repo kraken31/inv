@@ -10,6 +10,7 @@ const tbody = document.querySelector("#rsi-table tbody");
 const statusEl = document.getElementById("status");
 const searchEl = document.getElementById("search");
 const reloadEl = document.getElementById("reload");
+const exportEl = document.getElementById("export-csv");
 
 const nfPct = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
@@ -122,5 +123,9 @@ searchEl.addEventListener("input", (e) => {
 });
 
 reloadEl.addEventListener("click", loadData);
+
+exportEl.addEventListener("click", () => {
+  exportTableToCsv("#rsi-table", state.filtered, "rsi");
+});
 
 loadData();

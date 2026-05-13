@@ -44,6 +44,7 @@
     <section class="toolbar">
       <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
       <button id="reload" type="button">Actualiser</button>
+      <button id="export-csv" type="button">Exporter CSV</button>
     </section>
 
     <div id="status" class="status"></div>
@@ -64,6 +65,7 @@
     </main>
   </div>
 
+  <script src="{{ url_for('static', filename='csv.js') }}"></script>
   <script src="{{ url_for('static', filename='securite.js') }}"></script>
   <script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>
