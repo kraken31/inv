@@ -88,19 +88,18 @@ function renderSummary() {
   let totalPurchase = 0;
   let totalCurrent = 0;
   let totalDividend = 0;
-  let totalPlusMinus = 0;
   let maxDate = null;
 
   for (const r of state.filtered) {
     totalPurchase += Number(r.purchase_amount) || 0;
     totalCurrent += Number(r.current_amount) || 0;
     totalDividend += Number(r.dividend) || 0;
-    totalPlusMinus += Number(r.plus_minus_value) || 0;
     if (r.current_date && (!maxDate || r.current_date > maxDate)) {
       maxDate = r.current_date;
     }
   }
 
+  const totalPlusMinus = totalCurrent - totalPurchase;
   const perf = totalPurchase > 0
     ? (100 * (totalCurrent - totalPurchase)) / totalPurchase
     : null;
