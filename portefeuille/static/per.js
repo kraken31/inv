@@ -75,7 +75,7 @@ function render() {
       else tr.classList.add("row-bad");
     }
     tr.innerHTML = `
-      <td>${escapeHtml(r.name)}</td>
+      <td><a class="action-link" href="/action?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
       <td>${escapeHtml(formatDate(r.date))}</td>
       <td class="num">${r.per != null ? nfPct.format(r.per) : ""}</td>
     `;

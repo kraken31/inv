@@ -105,7 +105,7 @@ function render() {
     const tr = document.createElement("tr");
     tr.classList.add(growthClass(r));
     tr.innerHTML = `
-      <td>${escapeHtml(r.name)}</td>
+      <td><a class="action-link" href="/action?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
       <td class="num">${formatResult(r.result_n3)}</td>
       <td class="num">${formatResult(r.result_n2)}</td>
       <td class="num">${formatResult(r.result_n1)}</td>

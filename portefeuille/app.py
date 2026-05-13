@@ -13,7 +13,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 
 DB_PATH = os.environ.get(
@@ -104,6 +104,11 @@ def rendement_page():
         year=current_year,
         year_prev=current_year - 1,
     )
+
+
+@app.route("/action")
+def action_page():
+    return render_template("action.html")
 
 
 @app.route("/securite")
@@ -418,6 +423,166 @@ def api_securite():
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
 
     return jsonify(rows)
+
+
+@app.route("/api/action/search")
+def api_action_search():
+    """Autocomplete pour la page Action : renvoie au plus 20 actions
+    de la table `stocks` dont l'id (ISIN) ou le nom contient `q`.
+    """
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify([])
+    like = f"%{q}%"
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT id, COALESCE(name, id) AS name
+                    FROM stocks
+                    WHERE id LIKE ? OR name LIKE ?
+                    ORDER BY name COLLATE NOCASE
+                    LIMIT 20
+                    """,
+                    (like, like),
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/action/<stock_id>")
+def api_action_detail(stock_id: str):
+    """Synthèse d'une action : PER, RSI, dividendes par année,
+    résultats par année, et rendements (n, n-1, moyenne 5 ans,
+    moyenne 10 ans). Les rendements et les moyennes de dividendes
+    suivent la même logique que /api/rendement : filtrage des
+    dividendes exceptionnels (> 50% du prix), division par n
+    (et non par le nombre d'années réellement disponibles).
+    """
+    try:
+        with get_db() as conn:
+            stock = conn.execute(
+                "SELECT id, COALESCE(name, id) AS name "
+                "FROM stocks WHERE id = ?",
+                (stock_id,),
+            ).fetchone()
+            if stock is None:
+                return (
+                    jsonify({"error": f"Action introuvable: {stock_id}"}),
+                    404,
+                )
+
+            # Dernier PER / RSI / prix non-NULL (chacun indépendamment :
+            # le calcul peut être absent un jour donné).
+            latest_per = conn.execute(
+                "SELECT date, per FROM pricing "
+                "WHERE id = ? AND per IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1",
+                (stock_id,),
+            ).fetchone()
+            latest_rsi = conn.execute(
+                "SELECT date, rsi FROM pricing "
+                "WHERE id = ? AND rsi IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1",
+                (stock_id,),
+            ).fetchone()
+            latest_price = conn.execute(
+                "SELECT date, price FROM pricing "
+                "WHERE id = ? AND price IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1",
+                (stock_id,),
+            ).fetchone()
+
+            dividends = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT year, dividend FROM dividends "
+                    "WHERE id = ? AND year IS NOT NULL "
+                    "ORDER BY year DESC",
+                    (stock_id,),
+                )
+            ]
+            results = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT year, result FROM results "
+                    "WHERE id = ? AND year IS NOT NULL "
+                    "ORDER BY year DESC",
+                    (stock_id,),
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    current_year = date.today().year
+    price = latest_price["price"] if latest_price else None
+
+    div_by_year = {
+        d["year"]: d["dividend"]
+        for d in dividends
+        if d["year"] is not None and d["dividend"] is not None
+    }
+
+    def avg_dividend(span: int) -> float | None:
+        # Somme des dividendes des `span` dernières années (en
+        # excluant les valeurs exceptionnelles > 50% du prix
+        # courant, comme dans /api/rendement), divisée par `span`.
+        if not price or price <= 0:
+            return None
+        total = 0.0
+        any_value = False
+        for year in range(current_year - span + 1, current_year + 1):
+            div = div_by_year.get(year)
+            if div is None:
+                continue
+            if div > 0.5 * price:
+                continue
+            total += div
+            any_value = True
+        if not any_value:
+            return None
+        return total / span
+
+    def rendement(div: float | None) -> float | None:
+        if price and price > 0 and div is not None:
+            return div * 100.0 / price
+        return None
+
+    div_n = div_by_year.get(current_year)
+    div_n1 = div_by_year.get(current_year - 1)
+    div_avg5 = avg_dividend(5)
+    div_avg10 = avg_dividend(10)
+
+    return jsonify({
+        "id": stock["id"],
+        "name": stock["name"],
+        "per": latest_per["per"] if latest_per else None,
+        "per_date": latest_per["date"] if latest_per else None,
+        "rsi": latest_rsi["rsi"] if latest_rsi else None,
+        "rsi_date": latest_rsi["date"] if latest_rsi else None,
+        "price": price,
+        "price_date": latest_price["date"] if latest_price else None,
+        "year_n": current_year,
+        "year_n1": current_year - 1,
+        "dividend_n": div_n,
+        "dividend_n1": div_n1,
+        "dividend_avg5": div_avg5,
+        "dividend_avg10": div_avg10,
+        "rendement_n": rendement(div_n),
+        "rendement_n1": rendement(div_n1),
+        "rendement_avg5": rendement(div_avg5),
+        "rendement_avg10": rendement(div_avg10),
+        "dividends": dividends,
+        "results": results,
+    })
 
 
 @app.route("/api/liquidite")

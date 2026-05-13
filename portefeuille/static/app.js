@@ -133,7 +133,7 @@ function render() {
       else tr.classList.add("row-bad");
     }
     tr.innerHTML = `
-      <td>${escapeHtml(r.name)}</td>
+      <td><a class="action-link" href="/action?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
       <td class="num">${nfInt.format(r.quantity ?? 0)}</td>
       <td>${escapeHtml(r.purchase_date || "")}</td>
       <td class="num">${nfNum.format(r.purchase_price ?? 0)}</td>

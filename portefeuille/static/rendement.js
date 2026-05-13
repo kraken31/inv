@@ -82,7 +82,7 @@ function render() {
       else if (per >= 10 || per <= 0) tr.classList.add("row-bad");
     }
     tr.innerHTML = `
-      <td>${escapeHtml(r.name)}</td>
+      <td><a class="action-link" href="/action?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
       <td class="num">${formatNum(r.per)}</td>
       <td class="num">${formatNum(r.dividend)}</td>
       <td class="num">${formatPct(r.rendement)}</td>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Action</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Action</h1>
+    <nav class="nav">
+      <button id="refresh-pricing" type="button" class="nav-action"
+              title="Lance get_pricing.py pour rafraîchir les cours">
+        ↻ Cours
+      </button>
+      <span id="refresh-pricing-status" class="nav-status"></span>
+      <button id="refresh-dividends" type="button" class="nav-action"
+              title="Lance get_dividends.py pour rafraîchir les dividendes">
+        ↻ Dividendes
+      </button>
+      <span id="refresh-dividends-status" class="nav-status"></span>
+      <button id="refresh-results" type="button" class="nav-action"
+              title="Lance get_results.py pour rafraîchir les résultats">
+        ↻ Résultats
+      </button>
+      <span id="refresh-results-status" class="nav-status"></span>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <a href="{{ url_for('index') }}">Portefeuille</a>
+        <a href="{{ url_for('action_page') }}" class="active">Action</a>
+        <a href="{{ url_for('per_page') }}">PER</a>
+        <a href="{{ url_for('rsi_page') }}">RSI</a>
+        <a href="{{ url_for('rendement_page') }}">Rendement</a>
+        <a href="{{ url_for('securite_page') }}">Sécurité</a>
+      </nav>
+    </aside>
+
+    <main>
+    <section class="toolbar">
+      <div class="autocomplete">
+        <input type="search" id="action-search"
+               placeholder="Rechercher une action (nom ou ISIN)…"
+               autocomplete="off" />
+        <ul id="action-suggestions" class="autocomplete-list" hidden></ul>
+      </div>
+    </section>
+
+    <div id="status" class="status"></div>
+
+    <section id="action-detail" class="action-detail" hidden>
+      <header class="action-header">
+        <h2 id="action-name"></h2>
+        <span id="action-id" class="isin"></span>
+      </header>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">PER</div>
+          <div class="kpi-value" id="action-per">—</div>
+          <div class="kpi-meta" id="action-per-date"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">RSI</div>
+          <div class="kpi-value" id="action-rsi">—</div>
+          <div class="kpi-meta" id="action-rsi-date"></div>
+        </div>
+      </div>
+
+      <h3 class="section-title">Rendement</h3>
+      <table id="rendement-summary" class="wallet">
+        <thead>
+          <tr>
+            <th class="num">Rendement <span id="r-year-n"></span></th>
+            <th class="num">Rendement <span id="r-year-n1"></span></th>
+            <th class="num">Rendement moyen 5 ans</th>
+            <th class="num">Rendement moyen 10 ans</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="num" id="r-n"></td>
+            <td class="num" id="r-n1"></td>
+            <td class="num" id="r-avg5"></td>
+            <td class="num" id="r-avg10"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 class="section-title">Dividendes par année</h3>
+      <table id="dividends-table" class="wallet">
+        <thead>
+          <tr>
+            <th>Année</th>
+            <th class="num">Dividende</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <h3 class="section-title">Résultats par année</h3>
+      <table id="results-table" class="wallet">
+        <thead>
+          <tr>
+            <th>Année</th>
+            <th class="num">Résultat</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='action.js') }}"></script>
+  <script src="{{ url_for('static', filename='nav.js') }}"></script>
+</body>
+</html>
