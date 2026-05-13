@@ -35,9 +35,10 @@ Table cible :
 La colonne `rsi` est ajoutée automatiquement à la table existante via
 ALTER TABLE si elle est absente (idempotent).
 
-Le script est idempotent et reprenable : pour chaque action on fait
-DELETE puis INSERT sur son id, donc on peut le relancer sans perdre les
-données déjà récupérées.
+Le script est idempotent et reprenable : pour chaque action on écrase
+uniquement la ligne (id, date) — les autres dates déjà présentes dans
+`pricing` sont conservées. On peut donc le relancer sans perdre
+l'historique déjà récupéré.
 """
 
 import sqlite3
@@ -238,25 +239,27 @@ def ensure_schema(db: sqlite3.Connection) -> None:
 def upsert_pricing(
     db: sqlite3.Connection,
     stock_id: str,
-    date_iso: str | None,
-    price: float | None,
+    date_iso: str,
+    price: float,
     capitalisation: float | None,
     per: float | None,
     rsi: float | None,
 ) -> None:
-    """Remplace la ligne existante (id = stock_id) de `pricing` par les
-    nouvelles valeurs. Si on n'a même pas de prix, on supprime juste la
-    ligne (pas d'INSERT vide).
+    """Insère ou écrase la ligne (id, date) dans `pricing`. Toute ligne
+    existante pour la même action ET la même date est remplacée ; les
+    autres dates pour cette action sont conservées.
     """
     with _db_lock:
-        db.execute("DELETE FROM pricing WHERE id = ?", (stock_id,))
-        if date_iso is not None and price is not None:
-            db.execute(
-                "INSERT INTO pricing "
-                "(id, date, price, capitalisation, per, rsi) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (stock_id, date_iso, price, capitalisation, per, rsi),
-            )
+        db.execute(
+            "DELETE FROM pricing WHERE id = ? AND date = ?",
+            (stock_id, date_iso),
+        )
+        db.execute(
+            "INSERT INTO pricing "
+            "(id, date, price, capitalisation, per, rsi) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (stock_id, date_iso, price, capitalisation, per, rsi),
+        )
         db.commit()
 
 
@@ -306,9 +309,6 @@ def main() -> None:
 
                 if result is None:
                     no_price += 1
-                    upsert_pricing(
-                        db, stock_id, None, None, None, None, None
-                    )
                     print(f"[{i}/{len(rows)}] {ticker} sans prix")
                     continue
 

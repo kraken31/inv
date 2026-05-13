@@ -18,9 +18,10 @@ Table cible :
 - dividend : somme des dividendes versés cette année-là (en devise
              d'origine renvoyée par Yahoo)
 
-Le script est idempotent et reprenable : chaque action est mise à jour
-indépendamment (DELETE puis INSERT sur son id), donc on peut le relancer
-sans perdre les données déjà récupérées.
+Le script est idempotent et reprenable : pour chaque action on écrase
+uniquement les (id, year) renvoyés par Yahoo — les autres années déjà
+présentes dans `dividends` sont conservées. On peut donc le relancer
+sans perdre l'historique déjà récupéré.
 """
 
 import sqlite3
@@ -89,18 +90,23 @@ def fetch_dividends_by_year(ticker: str) -> dict[int, float]:
 def upsert_dividends(
     db: sqlite3.Connection, stock_id: str, totals: dict[int, float]
 ) -> None:
-    """Remplace les dividendes existants pour cette action par les
-    nouveaux."""
+    """Insère ou écrase chaque (id, year) de `dividends`. Pour chaque
+    année présente dans `totals`, l'éventuelle ligne existante est
+    remplacée ; les autres années déjà stockées pour cette action sont
+    conservées.
+    """
+    if not totals:
+        return
     with _db_lock:
-        db.execute("DELETE FROM dividends WHERE id = ?", (stock_id,))
-        if totals:
-            db.executemany(
+        for year, dividend in sorted(totals.items()):
+            db.execute(
+                "DELETE FROM dividends WHERE id = ? AND year = ?",
+                (stock_id, year),
+            )
+            db.execute(
                 "INSERT INTO dividends (id, year, dividend) "
                 "VALUES (?, ?, ?)",
-                [
-                    (stock_id, y, round(d, 6))
-                    for y, d in sorted(totals.items())
-                ],
+                (stock_id, year, round(dividend, 6)),
             )
         db.commit()
 
