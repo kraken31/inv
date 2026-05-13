@@ -43,10 +43,14 @@ function setupRefreshButton(buttonId, statusId, job) {
     if (data.running) {
       button.disabled = true;
       button.classList.add("running");
-      // Tant que le log est vide (subprocess vient juste de démarrer),
-      // on affiche un message d'attente.
-      if (data.last_log) {
-        setStatus(data.last_log, "log");
+      // Tant que le log n'a pas encore de ligne avec compteur (subprocess
+      // vient juste de démarrer, ou ligne d'en-tête type "632 actions à
+      // traiter"), on affiche un message d'attente. Sinon on n'affiche
+      // que le compteur d'avancement en tête de ligne ("[i/n]"), beaucoup
+      // plus lisible que la ligne complète dans la barre de nav.
+      const counter = data.last_log && data.last_log.match(/^\[\d+\/\d+\]/);
+      if (counter) {
+        setStatus(counter[0], "log");
       } else {
         setStatus("En cours…");
       }
