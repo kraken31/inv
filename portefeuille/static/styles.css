@@ -435,6 +435,27 @@ table.wallet tbody td.empty {
   color: var(--accent);
 }
 
+.col-actions {
+  width: 32px;
+  padding-left: 8px;
+  padding-right: 4px;
+}
+
+.row-delete {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s;
+}
+
+.row-delete:hover {
+  color: var(--neg);
+}
+
 /* ---------- Modale (dialog) ---------- */
 
 dialog.modal {
@@ -521,4 +542,22 @@ dialog.modal::backdrop {
 .modal-btn.primary:hover {
   color: var(--text);
   border-color: var(--accent-2);
+}
+
+.modal-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.modal-btn.danger {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
+.modal-btn.danger:hover {
+  color: #fff;
+  background: var(--neg);
+  border-color: var(--neg);
 }

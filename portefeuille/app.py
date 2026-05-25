@@ -200,6 +200,26 @@ def api_wallet():
     return jsonify(rows)
 
 
+@app.route("/api/wallet/<stock_id>", methods=["DELETE"])
+def api_wallet_delete(stock_id: str):
+    """Supprime une ligne de la table `wallet` identifiée par son
+    `id` (ISIN). Renvoie 404 si aucune ligne ne correspond.
+    """
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "DELETE FROM wallet WHERE id = ?", (stock_id,)
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "Action introuvable"}), 404
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"deleted": stock_id})
+
+
 @app.route("/api/per")
 def api_per():
     query = """

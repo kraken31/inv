@@ -139,6 +139,13 @@ function render() {
       else tr.classList.add("row-bad");
     }
     tr.innerHTML = `
+      <td class="col-actions">
+        <button type="button" class="row-delete"
+                data-id="${escapeHtml(r.id ?? "")}"
+                data-name="${escapeHtml(r.name ?? "")}"
+                title="Supprimer cette ligne"
+                aria-label="Supprimer">🗑</button>
+      </td>
       <td><a class="action-link" href="/action?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
       <td class="num">${nfInt.format(r.quantity ?? 0)}</td>
       <td>${escapeHtml(r.purchase_date || "")}</td>
@@ -259,6 +266,42 @@ liquiditeDialog.addEventListener("close", async () => {
     state.liquidite = data.liquidite;
     setStatus("");
     renderSummary();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+const deleteDialog = document.getElementById("delete-dialog");
+const deleteMessage = document.getElementById("delete-message");
+let pendingDeleteId = null;
+
+tbody.addEventListener("click", (e) => {
+  const btn = e.target.closest(".row-delete");
+  if (!btn) return;
+  pendingDeleteId = btn.dataset.id;
+  deleteMessage.textContent =
+    `« ${btn.dataset.name} » sera supprimée du portefeuille.`;
+  if (typeof deleteDialog.showModal === "function") {
+    deleteDialog.showModal();
+  }
+});
+
+deleteDialog.addEventListener("close", async () => {
+  const id = pendingDeleteId;
+  pendingDeleteId = null;
+  if (deleteDialog.returnValue !== "delete" || !id) return;
+  try {
+    setStatus("Suppression…");
+    const resp = await fetch(
+      `/api/wallet/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    setStatus("");
+    await loadData();
   } catch (e) {
     setStatus(`Erreur: ${e.message}`, true);
   }

@@ -76,6 +76,7 @@
     <table id="wallet-table" class="wallet">
       <thead>
         <tr>
+          <th class="col-actions"></th>
           <th data-key="name" class="sort">Nom</th>
           <th data-key="quantity" class="sort num">Quantité</th>
           <th data-key="purchase_date" class="sort">Date achat</th>
@@ -96,6 +97,19 @@
     </table>
     </main>
   </div>
+
+  <dialog id="delete-dialog" class="modal">
+    <form method="dialog" class="modal-form">
+      <h2 class="modal-title">Supprimer cette action ?</h2>
+      <p class="modal-text" id="delete-message"></p>
+      <div class="modal-actions">
+        <button type="submit" value="cancel" class="modal-btn">Annuler</button>
+        <button type="submit" value="delete" class="modal-btn danger">
+          Supprimer
+        </button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="liquidite-dialog" class="modal">
     <form method="dialog" class="modal-form">
