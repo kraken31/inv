@@ -183,6 +183,43 @@ main {
 
 .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
 
+.wallet-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.wallet-actions button.add-action {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.18), rgba(34, 211, 238, 0.18));
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.wallet-actions button.add-action:hover {
+  border-color: var(--accent-2);
+}
+
+.modal-field select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.modal-field select:focus {
+  border-color: var(--accent);
+}
+
 .status {
   font-size: 13px;
   color: var(--muted);

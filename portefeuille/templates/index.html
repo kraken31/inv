@@ -73,6 +73,11 @@
       </tbody>
     </table>
 
+    <section class="wallet-actions">
+      <button id="add-action" type="button" class="add-action"
+              title="Ajouter une action au portefeuille">+ Ajouter</button>
+    </section>
+
     <table id="wallet-table" class="wallet">
       <thead>
         <tr>
@@ -106,6 +111,53 @@
         <button type="submit" value="cancel" class="modal-btn">Annuler</button>
         <button type="submit" value="delete" class="modal-btn danger">
           Supprimer
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="add-dialog" class="modal">
+    <form method="dialog" class="modal-form">
+      <h2 class="modal-title">Ajouter une action</h2>
+      <label class="modal-field">
+        <span>Action</span>
+        <select id="add-id" required>
+          <option value="">— Choisir une action —</option>
+        </select>
+      </label>
+      <label class="modal-field">
+        <span>Quantité</span>
+        <input type="number" id="add-quantity" step="1" min="1" required />
+      </label>
+      <label class="modal-field">
+        <span>Date d'achat</span>
+        <input type="date" id="add-date" required />
+      </label>
+      <label class="modal-field">
+        <span>Prix d'achat (€)</span>
+        <input
+          type="number"
+          id="add-price"
+          step="0.0001"
+          min="0"
+          required
+        />
+      </label>
+      <label class="modal-field">
+        <span>Dividende (€)</span>
+        <input
+          type="number"
+          id="add-dividend"
+          step="0.01"
+          min="0"
+          value="0"
+          required
+        />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" value="cancel" class="modal-btn">Annuler</button>
+        <button type="submit" value="save" class="modal-btn primary">
+          Ajouter
         </button>
       </div>
     </form>

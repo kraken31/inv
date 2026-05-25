@@ -201,6 +201,86 @@ def api_wallet():
     return jsonify(rows)
 
 
+@app.route("/api/stocks/available")
+def api_stocks_available():
+    """Liste les actions de `stocks` qui ne sont pas encore dans
+    `wallet`. Sert à peupler le `<select>` de la modale d'ajout.
+    """
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT s.id, COALESCE(s.name, s.id) AS name
+                    FROM stocks s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM wallet w WHERE w.id = s.id
+                    )
+                    ORDER BY name COLLATE NOCASE
+                    """
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/wallet", methods=["POST"])
+def api_wallet_create():
+    """Ajoute une ligne dans `wallet`. Refuse si l'id n'existe pas
+    dans `stocks` (404) ou si une ligne pour cet id est déjà
+    présente dans `wallet` (409).
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        stock_id = str(payload["id"]).strip()
+        quantity = int(payload["quantity"])
+        price = float(payload["price"])
+        dividend = float(payload["dividend"])
+        date_str = str(payload["date"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Champs invalides"}), 400
+
+    if not stock_id:
+        return jsonify({"error": "Action requise"}), 400
+    if quantity <= 0:
+        return jsonify({"error": "Quantité doit être > 0"}), 400
+    if price < 0 or dividend < 0:
+        return jsonify({"error": "Valeurs négatives interdites"}), 400
+    if not math.isfinite(price) or not math.isfinite(dividend):
+        return jsonify({"error": "Valeurs non finies"}), 400
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        return jsonify({"error": "Date invalide (YYYY-MM-DD)"}), 400
+
+    try:
+        with get_db_rw() as conn:
+            if not conn.execute(
+                "SELECT 1 FROM stocks WHERE id = ?", (stock_id,)
+            ).fetchone():
+                return jsonify({"error": "Action inconnue"}), 404
+            if conn.execute(
+                "SELECT 1 FROM wallet WHERE id = ?", (stock_id,)
+            ).fetchone():
+                return (
+                    jsonify({"error": "Action déjà dans le portefeuille"}),
+                    409,
+                )
+            conn.execute(
+                "INSERT INTO wallet (id, quantity, date, price, dividend) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (stock_id, quantity, date_str, price, dividend),
+            )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"created": stock_id}), 201
+
+
 @app.route("/api/wallet/<stock_id>", methods=["DELETE"])
 def api_wallet_delete(stock_id: str):
     """Supprime une ligne de la table `wallet` identifiée par son

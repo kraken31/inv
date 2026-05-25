@@ -194,6 +194,14 @@ function toIsoDate(s) {
   return "";
 }
 
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;",
@@ -372,6 +380,84 @@ editDialog.addEventListener("close", async () => {
     setStatus("Mise à jour…");
     const resp = await fetch(`/api/wallet/${encodeURIComponent(id)}`, {
       method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    setStatus("");
+    await loadData();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+const addBtn = document.getElementById("add-action");
+const addDialog = document.getElementById("add-dialog");
+const addId = document.getElementById("add-id");
+const addQuantity = document.getElementById("add-quantity");
+const addDate = document.getElementById("add-date");
+const addPrice = document.getElementById("add-price");
+const addDividend = document.getElementById("add-dividend");
+
+addBtn.addEventListener("click", async () => {
+  try {
+    setStatus("Chargement des actions disponibles…");
+    const resp = await fetch("/api/stocks/available");
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const stocks = await resp.json();
+    const opts = ['<option value="">— Choisir une action —</option>'];
+    for (const s of stocks) {
+      opts.push(
+        `<option value="${escapeHtml(s.id)}">` +
+          `${escapeHtml(s.name)} (${escapeHtml(s.id)})</option>`,
+      );
+    }
+    addId.innerHTML = opts.join("");
+    addId.value = "";
+    addQuantity.value = "";
+    addDate.value = todayIso();
+    addPrice.value = "";
+    addDividend.value = "0";
+    setStatus("");
+    if (typeof addDialog.showModal === "function") {
+      addDialog.showModal();
+      addId.focus();
+    }
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+addDialog.addEventListener("close", async () => {
+  if (addDialog.returnValue !== "save") return;
+  const body = {
+    id: addId.value,
+    quantity: Number(addQuantity.value),
+    date: addDate.value,
+    price: Number(addPrice.value),
+    dividend: Number(addDividend.value),
+  };
+  if (
+    !body.id ||
+    !Number.isFinite(body.quantity) ||
+    body.quantity <= 0 ||
+    !Number.isFinite(body.price) ||
+    !Number.isFinite(body.dividend) ||
+    !body.date
+  ) {
+    setStatus("Champs invalides", true);
+    return;
+  }
+  try {
+    setStatus("Ajout…");
+    const resp = await fetch("/api/wallet", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
