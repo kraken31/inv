@@ -6,6 +6,7 @@ API Flask qui lit la table `wallet` (jointure sur `stocks` via la colonne
 
 import math
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -218,6 +219,44 @@ def api_wallet_delete(stock_id: str):
     except sqlite3.Error as exc:
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
     return jsonify({"deleted": stock_id})
+
+
+@app.route("/api/wallet/<stock_id>", methods=["PUT"])
+def api_wallet_update(stock_id: str):
+    """Met à jour quantity / date / price / dividend pour la ligne
+    `wallet` d'id donné. Tous les champs sont requis.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        quantity = int(payload["quantity"])
+        price = float(payload["price"])
+        dividend = float(payload["dividend"])
+        date_str = str(payload["date"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Champs invalides"}), 400
+
+    if quantity < 0 or price < 0 or dividend < 0:
+        return jsonify({"error": "Valeurs négatives interdites"}), 400
+    if not math.isfinite(price) or not math.isfinite(dividend):
+        return jsonify({"error": "Valeurs non finies"}), 400
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        return jsonify({"error": "Date invalide (YYYY-MM-DD)"}), 400
+
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "UPDATE wallet SET quantity = ?, date = ?, "
+                "price = ?, dividend = ? WHERE id = ?",
+                (quantity, date_str, price, dividend, stock_id),
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "Action introuvable"}), 404
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"updated": stock_id})
 
 
 @app.route("/api/per")

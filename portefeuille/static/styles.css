@@ -436,11 +436,13 @@ table.wallet tbody td.empty {
 }
 
 .col-actions {
-  width: 32px;
+  width: 56px;
   padding-left: 8px;
   padding-right: 4px;
+  white-space: nowrap;
 }
 
+.row-edit,
 .row-delete {
   border: none;
   background: transparent;
@@ -450,6 +452,14 @@ table.wallet tbody td.empty {
   cursor: pointer;
   padding: 2px 4px;
   transition: color 0.15s;
+}
+
+.row-edit {
+  margin-right: 2px;
+}
+
+.row-edit:hover {
+  color: var(--accent);
 }
 
 .row-delete:hover {

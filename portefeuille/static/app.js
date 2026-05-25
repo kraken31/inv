@@ -140,6 +140,15 @@ function render() {
     }
     tr.innerHTML = `
       <td class="col-actions">
+        <button type="button" class="row-edit"
+                data-id="${escapeHtml(r.id ?? "")}"
+                data-name="${escapeHtml(r.name ?? "")}"
+                data-quantity="${r.quantity ?? 0}"
+                data-date="${escapeHtml(r.purchase_date ?? "")}"
+                data-price="${r.purchase_price ?? 0}"
+                data-dividend="${r.dividend ?? 0}"
+                title="Modifier cette ligne"
+                aria-label="Modifier">✎</button>
         <button type="button" class="row-delete"
                 data-id="${escapeHtml(r.id ?? "")}"
                 data-name="${escapeHtml(r.name ?? "")}"
@@ -174,6 +183,15 @@ function formatCurrentDate(s) {
   if (!s) return "";
   const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+
+function toIsoDate(s) {
+  if (!s) return "";
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const m2 = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+  return "";
 }
 
 function escapeHtml(s) {
@@ -275,14 +293,38 @@ const deleteDialog = document.getElementById("delete-dialog");
 const deleteMessage = document.getElementById("delete-message");
 let pendingDeleteId = null;
 
+const editDialog = document.getElementById("edit-dialog");
+const editTitle = document.getElementById("edit-title");
+const editQuantity = document.getElementById("edit-quantity");
+const editDate = document.getElementById("edit-date");
+const editPrice = document.getElementById("edit-price");
+const editDividend = document.getElementById("edit-dividend");
+let pendingEditId = null;
+
 tbody.addEventListener("click", (e) => {
-  const btn = e.target.closest(".row-delete");
-  if (!btn) return;
-  pendingDeleteId = btn.dataset.id;
-  deleteMessage.textContent =
-    `« ${btn.dataset.name} » sera supprimée du portefeuille.`;
-  if (typeof deleteDialog.showModal === "function") {
-    deleteDialog.showModal();
+  const delBtn = e.target.closest(".row-delete");
+  if (delBtn) {
+    pendingDeleteId = delBtn.dataset.id;
+    deleteMessage.textContent =
+      `« ${delBtn.dataset.name} » sera supprimée du portefeuille.`;
+    if (typeof deleteDialog.showModal === "function") {
+      deleteDialog.showModal();
+    }
+    return;
+  }
+  const editBtn = e.target.closest(".row-edit");
+  if (editBtn) {
+    pendingEditId = editBtn.dataset.id;
+    editTitle.textContent = `Modifier « ${editBtn.dataset.name} »`;
+    editQuantity.value = editBtn.dataset.quantity;
+    editDate.value = toIsoDate(editBtn.dataset.date);
+    editPrice.value = editBtn.dataset.price;
+    editDividend.value = editBtn.dataset.dividend;
+    if (typeof editDialog.showModal === "function") {
+      editDialog.showModal();
+      editQuantity.focus();
+      editQuantity.select();
+    }
   }
 });
 
@@ -296,6 +338,43 @@ deleteDialog.addEventListener("close", async () => {
       `/api/wallet/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    setStatus("");
+    await loadData();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+editDialog.addEventListener("close", async () => {
+  const id = pendingEditId;
+  pendingEditId = null;
+  if (editDialog.returnValue !== "save" || !id) return;
+  const body = {
+    quantity: Number(editQuantity.value),
+    date: editDate.value,
+    price: Number(editPrice.value),
+    dividend: Number(editDividend.value),
+  };
+  if (
+    !Number.isFinite(body.quantity) ||
+    !Number.isFinite(body.price) ||
+    !Number.isFinite(body.dividend) ||
+    !body.date
+  ) {
+    setStatus("Champs invalides", true);
+    return;
+  }
+  try {
+    setStatus("Mise à jour…");
+    const resp = await fetch(`/api/wallet/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);

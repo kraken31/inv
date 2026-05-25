@@ -111,6 +111,46 @@
     </form>
   </dialog>
 
+  <dialog id="edit-dialog" class="modal">
+    <form method="dialog" class="modal-form">
+      <h2 class="modal-title" id="edit-title">Modifier la ligne</h2>
+      <label class="modal-field">
+        <span>Quantité</span>
+        <input type="number" id="edit-quantity" step="1" min="0" required />
+      </label>
+      <label class="modal-field">
+        <span>Date d'achat</span>
+        <input type="date" id="edit-date" required />
+      </label>
+      <label class="modal-field">
+        <span>Prix d'achat (€)</span>
+        <input
+          type="number"
+          id="edit-price"
+          step="0.0001"
+          min="0"
+          required
+        />
+      </label>
+      <label class="modal-field">
+        <span>Dividende (€)</span>
+        <input
+          type="number"
+          id="edit-dividend"
+          step="0.01"
+          min="0"
+          required
+        />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" value="cancel" class="modal-btn">Annuler</button>
+        <button type="submit" value="save" class="modal-btn primary">
+          Enregistrer
+        </button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="liquidite-dialog" class="modal">
     <form method="dialog" class="modal-form">
       <h2 class="modal-title">Modifier la liquidité</h2>
