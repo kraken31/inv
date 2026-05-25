@@ -114,10 +114,16 @@ function renderSummary() {
   document.getElementById("s-date").textContent = formatCurrentDate(maxDate);
   set("s-current", nfEur.format(totalCurrent));
   set("s-dividend", nfEur.format(totalDividend));
-  set(
-    "s-liquidite",
-    state.liquidite != null ? nfEur.format(state.liquidite) : "",
-  );
+
+  const liquiditeEl = document.getElementById("s-liquidite");
+  const amountText = state.liquidite != null ? nfEur.format(state.liquidite) : "";
+  liquiditeEl.className = "num";
+  liquiditeEl.innerHTML = `
+    <span class="cell-value">${escapeHtml(amountText)}</span>
+    <button type="button" class="cell-edit" title="Modifier la liquidité"
+            aria-label="Modifier la liquidité">✎</button>
+  `;
+
   set("s-plus-minus", nfEur.format(totalPlusMinus), `num ${signClass(totalPlusMinus)}`);
   set("s-perf", fmtPct(perf), `num ${signClass(perf)}`);
 }
@@ -217,5 +223,45 @@ searchEl.addEventListener("input", (e) => {
 });
 
 reloadEl.addEventListener("click", loadData);
+
+const liquiditeDialog = document.getElementById("liquidite-dialog");
+const liquiditeInput = document.getElementById("liquidite-input");
+
+document.getElementById("s-liquidite").addEventListener("click", (e) => {
+  if (!e.target.closest(".cell-edit")) return;
+  liquiditeInput.value = state.liquidite != null ? state.liquidite : "";
+  if (typeof liquiditeDialog.showModal === "function") {
+    liquiditeDialog.showModal();
+    liquiditeInput.focus();
+    liquiditeInput.select();
+  }
+});
+
+liquiditeDialog.addEventListener("close", async () => {
+  if (liquiditeDialog.returnValue !== "save") return;
+  const value = Number(liquiditeInput.value);
+  if (!Number.isFinite(value) || value < 0) {
+    setStatus("Liquidité invalide", true);
+    return;
+  }
+  try {
+    setStatus("Mise à jour de la liquidité…");
+    const resp = await fetch("/api/liquidite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ liquidite: value }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    state.liquidite = data.liquidite;
+    setStatus("");
+    renderSummary();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
 
 loadData();

@@ -4,6 +4,7 @@ API Flask qui lit la table `wallet` (jointure sur `stocks` via la colonne
 `id`) de la base SQLite locale et expose les données au front.
 """
 
+import math
 import os
 import sqlite3
 import subprocess
@@ -77,6 +78,16 @@ def get_db() -> sqlite3.Connection:
     if not Path(DB_PATH).exists():
         raise FileNotFoundError(f"Base introuvable: {DB_PATH}")
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def get_db_rw() -> sqlite3.Connection:
+    """Connexion SQLite en lecture/écriture (pour les rares mutations
+    déclenchées depuis l'UI, p.ex. mise à jour de la liquidité)."""
+    if not Path(DB_PATH).exists():
+        raise FileNotFoundError(f"Base introuvable: {DB_PATH}")
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -585,7 +596,7 @@ def api_action_detail(stock_id: str):
     })
 
 
-@app.route("/api/liquidite")
+@app.route("/api/liquidite", methods=["GET"])
 def api_liquidite():
     try:
         with get_db() as conn:
@@ -598,6 +609,40 @@ def api_liquidite():
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
 
     return jsonify({"liquidite": row["liquidite"] if row else None})
+
+
+@app.route("/api/liquidite", methods=["POST"])
+def api_liquidite_update():
+    """Met à jour (ou insère) la valeur de liquidité dans
+    `walletDetails`. La table est mono-ligne : on tente un UPDATE et,
+    si aucune ligne n'existe encore, on bascule sur INSERT.
+    """
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get("liquidite")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Champ 'liquidite' invalide"}), 400
+    if not math.isfinite(value) or value < 0:
+        return jsonify({"error": "Champ 'liquidite' invalide"}), 400
+
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "UPDATE walletDetails SET liquidite = ?", (value,)
+            )
+            if cur.rowcount == 0:
+                conn.execute(
+                    "INSERT INTO walletDetails (liquidite) VALUES (?)",
+                    (value,),
+                )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify({"liquidite": value})
 
 
 def _last_log_line(path: str | None) -> str | None:

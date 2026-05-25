@@ -97,6 +97,28 @@
     </main>
   </div>
 
+  <dialog id="liquidite-dialog" class="modal">
+    <form method="dialog" class="modal-form">
+      <h2 class="modal-title">Modifier la liquidité</h2>
+      <label class="modal-field">
+        <span>Nouvelle liquidité (€)</span>
+        <input
+          type="number"
+          id="liquidite-input"
+          step="0.01"
+          min="0"
+          required
+        />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" value="cancel" class="modal-btn">Annuler</button>
+        <button type="submit" value="save" class="modal-btn primary">
+          Enregistrer
+        </button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="{{ url_for('static', filename='app.js') }}"></script>
   <script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>

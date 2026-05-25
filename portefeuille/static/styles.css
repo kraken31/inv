@@ -415,3 +415,110 @@ table.wallet tbody td.empty {
   color: var(--muted);
   font-style: italic;
 }
+
+/* ---------- Bouton crayon inline dans une cellule ---------- */
+
+.cell-edit {
+  margin-left: 8px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: color 0.15s;
+}
+
+.cell-edit:hover {
+  color: var(--accent);
+}
+
+/* ---------- Modale (dialog) ---------- */
+
+dialog.modal {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  max-width: 360px;
+  width: 90vw;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+dialog.modal::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.modal-field input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.modal-field input:focus {
+  border-color: var(--accent);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.modal-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.modal-btn.primary {
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.18), rgba(34, 211, 238, 0.18));
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.modal-btn.primary:hover {
+  color: var(--text);
+  border-color: var(--accent-2);
+}
