@@ -93,6 +93,14 @@ def get_db_rw() -> sqlite3.Connection:
     return conn
 
 
+def iso_to_fr_date(date_str: str) -> str:
+    """Convertit une date `YYYY-MM-DD` (telle qu'envoyée par
+    `<input type="date">`) vers le format de stockage `DD/MM/YYYY`.
+    Suppose que le format ISO a déjà été validé en amont.
+    """
+    return f"{date_str[8:10]}/{date_str[5:7]}/{date_str[0:4]}"
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -271,7 +279,13 @@ def api_wallet_create():
             conn.execute(
                 "INSERT INTO wallet (id, quantity, date, price, dividend) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (stock_id, quantity, date_str, price, dividend),
+                (
+                    stock_id,
+                    quantity,
+                    iso_to_fr_date(date_str),
+                    price,
+                    dividend,
+                ),
             )
             conn.commit()
     except FileNotFoundError as exc:
@@ -327,7 +341,13 @@ def api_wallet_update(stock_id: str):
             cur = conn.execute(
                 "UPDATE wallet SET quantity = ?, date = ?, "
                 "price = ?, dividend = ? WHERE id = ?",
-                (quantity, date_str, price, dividend, stock_id),
+                (
+                    quantity,
+                    iso_to_fr_date(date_str),
+                    price,
+                    dividend,
+                    stock_id,
+                ),
             )
             if cur.rowcount == 0:
                 return jsonify({"error": "Action introuvable"}), 404
