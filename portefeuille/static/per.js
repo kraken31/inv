@@ -22,6 +22,16 @@ function setStatus(msg, isError = false) {
   statusEl.classList.toggle("error", !!isError);
 }
 
+function parseDateLike(s) {
+  if (s == null) return null;
+  const str = String(s);
+  let m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  return null;
+}
+
 function compare(a, b, key, dir) {
   const va = a[key];
   const vb = b[key];
@@ -29,10 +39,20 @@ function compare(a, b, key, dir) {
   if (typeof va === "number" && typeof vb === "number") {
     cmp = va - vb;
   } else {
-    cmp = String(va ?? "").localeCompare(String(vb ?? ""), "fr", {
-      numeric: true,
-      sensitivity: "base",
-    });
+    const da = parseDateLike(va);
+    const db = parseDateLike(vb);
+    if (da != null && db != null) {
+      cmp = da - db;
+    } else if (da != null) {
+      cmp = -1;
+    } else if (db != null) {
+      cmp = 1;
+    } else {
+      cmp = String(va ?? "").localeCompare(String(vb ?? ""), "fr", {
+        numeric: true,
+        sensitivity: "base",
+      });
+    }
   }
   return dir === "asc" ? cmp : -cmp;
 }
