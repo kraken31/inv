@@ -28,6 +28,15 @@ DB_PATH = os.environ.get(
 # portable.
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 
+# Seuil minimal de tickers pour qu'une année soit considérée
+# « publiée » par yfinance et utilisable comme année de référence
+# sur la page Sécurité. En dessous, l'année est ignorée (typiquement
+# une année récente où seuls quelques tickers ont déjà publié leur
+# compte de résultat, ce qui viderait artificiellement le tableau).
+# La valeur est aussi répliquée en dur dans la CTE `year_n` de
+# /api/securite ci-dessous — penser à les garder synchronisés.
+SECURITE_YEAR_MIN_COVERAGE = 50
+
 app = Flask(__name__)
 
 
@@ -135,12 +144,24 @@ def action_page():
 def securite_page():
     # On dérive l'année « n » depuis la table results : c'est la
     # dernière année réellement présente, qui dépend de yfinance et
-    # non du calendrier. Fallback sur l'année précédente si la table
-    # est vide / illisible.
+    # non du calendrier. On exige une couverture minimale
+    # (SECURITE_YEAR_MIN_COVERAGE tickers) pour ignorer les années
+    # « entamées » où seuls quelques émetteurs ont déjà publié — sans
+    # ce garde-fou, year_n bascule trop tôt et la page se vide.
+    # Fallback sur l'année précédente si la table est vide / illisible.
     try:
         with get_db() as conn:
             row = conn.execute(
-                "SELECT MAX(year) AS n FROM results"
+                """
+                SELECT MAX(year) AS n FROM (
+                    SELECT year
+                    FROM results
+                    WHERE year IS NOT NULL
+                    GROUP BY year
+                    HAVING COUNT(*) >= ?
+                )
+                """,
+                (SECURITE_YEAR_MIN_COVERAGE,),
             ).fetchone()
             year_n = (
                 row["n"]
@@ -547,7 +568,19 @@ def api_securite():
             SELECT MAX(date) AS max_date FROM latest_per
         ),
         year_n AS (
-            SELECT MAX(year) AS n FROM results
+            -- Même logique que securite_page() : on retient la
+            -- dernière année avec une couverture suffisante
+            -- (>= SECURITE_YEAR_MIN_COVERAGE tickers). La valeur
+            -- 50 est dupliquée ici car SQLite ne permet pas
+            -- d'injecter un paramètre Python dans une CTE simple
+            -- sans complexifier la requête.
+            SELECT MAX(year) AS n FROM (
+                SELECT year
+                FROM results
+                WHERE year IS NOT NULL
+                GROUP BY year
+                HAVING COUNT(*) >= 50
+            )
         ),
         results_pivot AS (
             SELECT
