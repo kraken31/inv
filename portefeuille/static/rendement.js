@@ -1,7 +1,7 @@
 const state = {
   rows: [],
   filtered: [],
-  sortKey: "rendement",
+  sortKey: "rendement_avg5",
   sortDir: "desc",
   query: "",
 };
