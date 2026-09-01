@@ -30,7 +30,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 
 # Seuil minimal de tickers pour qu'une année soit considérée
 # « publiée » par yfinance et utilisable comme année de référence
-# sur la page Sécurité. En dessous, l'année est ignorée (typiquement
+# sur la page Croissance. En dessous, l'année est ignorée (typiquement
 # une année récente où seuls quelques tickers ont déjà publié leur
 # compte de résultat, ce qui viderait artificiellement le tableau).
 # La valeur est aussi répliquée en dur dans la CTE `year_n` de

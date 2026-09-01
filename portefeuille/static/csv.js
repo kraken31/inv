@@ -1,5 +1,5 @@
 // Utilitaire d'export CSV partagé par les pages PER, RSI, Rendement
-// et Sécurité. Lit les en-têtes du <thead> (texte affiché + data-key)
+// et Croissance. Lit les en-têtes du <thead> (texte affiché + data-key)
 // et sérialise les lignes fournies (généralement state.filtered, donc
 // ce qui est visible à l'écran après filtre/tri).
 //

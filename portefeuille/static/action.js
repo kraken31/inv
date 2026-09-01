@@ -19,7 +19,7 @@ const nfNum = new Intl.NumberFormat("fr-FR", {
 
 // Résultats nets : entiers € potentiellement très grands, on les
 // affiche en notation compacte fr-FR ("40,6 M") comme dans la
-// page Sécurité.
+// page Croissance.
 const nfCompact = new Intl.NumberFormat("fr-FR", {
   notation: "compact",
   compactDisplay: "short",

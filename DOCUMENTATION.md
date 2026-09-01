@@ -4,7 +4,7 @@ Application personnelle de suivi d’un portefeuille d’actions cotées sur **E
 
 - un **référentiel de titres** alimenté depuis Euronext et Yahoo Finance ;
 - un **portefeuille** (positions détenues, liquidité) ;
-- des **écrans de screening** (PER, RSI, rendement, sécurité des résultats) ;
+- des **écrans de screening** (PER, RSI, rendement, croissance des résultats) ;
 - une **fiche titre** détaillée.
 
 L’interface web est une application Flask locale (`portefeuille/`), branchée sur la base SQLite `inv.db`. Les données de marché ne sont pas temps réel : elles sont rafraîchies à la demande via des scripts Yahoo Finance.
@@ -111,15 +111,15 @@ Quatre horizons :
 
 Un dividende **exceptionnel** (montant > 50 % du cours actuel) est **exclu** des moyennes 5 et 10 ans. Les moyennes divisent toujours par 5 ou 10, même si certaines années manquent.
 
-### 3.6 Année de référence « n » (Sécurité)
+### 3.6 Année de référence « n » (Croissance)
 
-Sur l’écran Sécurité, l’année **n** n’est pas l’année calendaire : c’est la **dernière année de résultats** pour laquelle au moins **50 titres** ont un résultat publié. Cela évite de basculer trop tôt sur une année où seuls quelques émetteurs ont déjà déposé leurs comptes.
+Sur l’écran Croissance, l’année **n** n’est pas l’année calendaire : c’est la **dernière année de résultats** pour laquelle au moins **50 titres** ont un résultat publié. Cela évite de basculer trop tôt sur une année où seuls quelques émetteurs ont déjà déposé leurs comptes.
 
 ---
 
 ## 4. Écrans
 
-Navigation latérale commune : Portefeuille, Action, PER, RSI, Rendement, Sécurité.
+Navigation latérale commune : Portefeuille, Action, PER, RSI, Rendement, Croissance.
 
 Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats** (voir § 6).
 
@@ -184,7 +184,7 @@ Colonnes : PER, dividende et rendement pour n, n−1, moyenne 5 ans, moyenne 10 
 
 Tri par défaut : rendement moyen 5 ans décroissant. Coloration PER : vert si 0 < PER < 10, rouge sinon. Export CSV.
 
-### 4.6 Sécurité (`/securite`)
+### 4.6 Croissance (`/securite`)
 
 Screener « qualité des résultats + valorisation ».
 
@@ -247,7 +247,7 @@ Le référentiel lui-même (`get_stocks.py`) n’est **pas** exposé dans l’UI
 ## 7. Parcours utilisateur types
 
 1. **Tenir le portefeuille** — Ajouter / modifier une ligne, saisir la liquidité, lancer ↻ Cours, relire synthèse et +/- value.
-2. **Chercher une idée d’achat** — PER (pas cher) ∩ RSI (survendu) ∩ Sécurité (bénéfices croissants), puis ouvrir la fiche Action.
+2. **Chercher une idée d’achat** — PER (pas cher) ∩ RSI (survendu) ∩ Croissance (bénéfices croissants), puis ouvrir la fiche Action.
 3. **Comparer les rendements** — écran Rendement, tri 5 ans, croiser avec le PER coloré.
 4. **Analyser un titre** — fiche Action depuis n’importe quel tableau, ou recherche directe.
 
