@@ -25,6 +25,11 @@
         ↻ Résultats
       </button>
       <span id="refresh-results-status" class="nav-status"></span>
+      <button id="refresh-pricing-etf" type="button" class="nav-action"
+              title="Lance get_pricing_etf.py pour rafraîchir les cours ETF">
+        ↻ Cours ETF
+      </button>
+      <span id="refresh-pricing-etf-status" class="nav-status"></span>
     </nav>
   </header>
 
@@ -37,6 +42,7 @@
         <a href="{{ url_for('rsi_page') }}">RSI</a>
         <a href="{{ url_for('rendement_page') }}" class="active">Rendement</a>
         <a href="{{ url_for('securite_page') }}">Croissance</a>
+        <a href="{{ url_for('etf_page') }}">ETF</a>
       </nav>
     </aside>
 

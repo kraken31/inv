@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RSI</title>
+  <title>ETF</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body>
   <header class="topbar">
-    <h1>RSI &lt; 30</h1>
+    <h1>ETF</h1>
     <nav class="nav">
       <button id="refresh-pricing" type="button" class="nav-action"
               title="Lance get_pricing.py pour rafraîchir les cours">
@@ -39,37 +39,43 @@
         <a href="{{ url_for('index') }}">Portefeuille</a>
         <a href="{{ url_for('action_page') }}">Action</a>
         <a href="{{ url_for('per_page') }}">PER</a>
-        <a href="{{ url_for('rsi_page') }}" class="active">RSI</a>
+        <a href="{{ url_for('rsi_page') }}">RSI</a>
         <a href="{{ url_for('rendement_page') }}">Rendement</a>
         <a href="{{ url_for('securite_page') }}">Croissance</a>
-        <a href="{{ url_for('etf_page') }}">ETF</a>
+        <a href="{{ url_for('etf_page') }}" class="active">ETF</a>
       </nav>
     </aside>
 
     <main>
     <section class="toolbar">
-      <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
-      <button id="reload" type="button">Actualiser</button>
-      <button id="export-csv" type="button">Exporter CSV</button>
+      <div class="autocomplete">
+        <input type="search" id="etf-search"
+               placeholder="Rechercher un ETF (nom ou ticker)…"
+               autocomplete="off" />
+        <ul id="etf-suggestions" class="autocomplete-list" hidden></ul>
+      </div>
     </section>
 
     <div id="status" class="status"></div>
 
-    <table id="rsi-table" class="wallet">
-      <thead>
-        <tr>
-          <th data-key="name" class="sort">Nom</th>
-          <th data-key="per" class="sort num">PER</th>
-          <th data-key="rsi" class="sort num">RSI</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <section id="etf-detail" class="action-detail" hidden>
+      <header class="action-header">
+        <h2 id="etf-name"></h2>
+        <span id="etf-id" class="isin"></span>
+      </header>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">Dernier prix</div>
+          <div class="kpi-value" id="etf-price">—</div>
+          <div class="kpi-meta" id="etf-price-date"></div>
+        </div>
+      </div>
+    </section>
     </main>
   </div>
 
-  <script src="{{ url_for('static', filename='csv.js') }}"></script>
-  <script src="{{ url_for('static', filename='rsi.js') }}"></script>
+  <script src="{{ url_for('static', filename='etf.js') }}"></script>
   <script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>
 </html>

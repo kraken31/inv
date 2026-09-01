@@ -80,6 +80,11 @@ _REFRESH_JOBS: dict[str, dict] = {
         "lock": threading.Lock(),
         "state": _new_state(),
     },
+    "pricing_etf": {
+        "script": SCRIPTS_DIR / "get_pricing_etf.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
 }
 
 
@@ -138,6 +143,11 @@ def rendement_page():
 @app.route("/action")
 def action_page():
     return render_template("action.html")
+
+
+@app.route("/etf")
+def etf_page():
+    return render_template("etf.html")
 
 
 @app.route("/securite")
@@ -785,6 +795,73 @@ def api_action_detail(stock_id: str):
         "rendement_avg10": rendement(div_avg10),
         "dividends": dividends,
         "results": results,
+    })
+
+
+@app.route("/api/etf/search")
+def api_etf_search():
+    """Autocomplete pour la page ETF : au plus 20 ETF de la table
+    `etf` dont l'id (ticker) ou le nom contient `q`.
+    """
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify([])
+    like = f"%{q}%"
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT id, COALESCE(name, id) AS name
+                    FROM etf
+                    WHERE id LIKE ? OR name LIKE ?
+                    ORDER BY name COLLATE NOCASE
+                    LIMIT 20
+                    """,
+                    (like, like),
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/etf/<etf_id>")
+def api_etf_detail(etf_id: str):
+    """Fiche d'un ETF : nom, ticker et dernier cours connu
+    (table `pricing_etf`, MAX(date)).
+    """
+    try:
+        with get_db() as conn:
+            etf = conn.execute(
+                "SELECT id, COALESCE(name, id) AS name "
+                "FROM etf WHERE id = ?",
+                (etf_id,),
+            ).fetchone()
+            if etf is None:
+                return (
+                    jsonify({"error": f"ETF introuvable: {etf_id}"}),
+                    404,
+                )
+            latest = conn.execute(
+                "SELECT date, price FROM pricing_etf "
+                "WHERE id = ? AND price IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1",
+                (etf_id,),
+            ).fetchone()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify({
+        "id": etf["id"],
+        "name": etf["name"],
+        "price": latest["price"] if latest else None,
+        "price_date": latest["date"] if latest else None,
     })
 
 

@@ -103,5 +103,6 @@ function setupRefreshButton(buttonId, statusId, job) {
 }
 
 setupRefreshButton("refresh-pricing", "refresh-pricing-status", "pricing");
+setupRefreshButton("refresh-pricing-etf", "refresh-pricing-etf-status", "pricing_etf");
 setupRefreshButton("refresh-dividends", "refresh-dividends-status", "dividends");
 setupRefreshButton("refresh-results", "refresh-results-status", "results");

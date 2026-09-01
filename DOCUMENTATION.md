@@ -119,11 +119,11 @@ Sur l’écran Croissance, l’année **n** n’est pas l’année calendaire : 
 
 ## 4. Écrans
 
-Navigation latérale commune : Portefeuille, Action, PER, RSI, Rendement, Croissance.
+Navigation latérale commune : Portefeuille, Action, PER, RSI, Rendement, Croissance, ETF.
 
-Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats** (voir § 6).
+Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats**, **↻ Cours ETF** (voir § 6).
 
-Recherche (sauf fiche Action) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…`).
+Recherche (sauf fiches Action et ETF) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…`).
 
 ### 4.1 Portefeuille (`/`)
 
@@ -204,6 +204,14 @@ Coloration selon la **croissance stricte consécutive** des résultats, en parta
 
 Les résultats sont affichés en notation compacte. Export CSV.
 
+### 4.7 ETF (`/etf`)
+
+Fiche d’un ETF du référentiel Paris (table `etf`).
+
+- recherche avec **autocomplétion** (nom ou ticker, 20 résultats max) ;
+- URL bookmarkable : `/etf?id=B28A` ;
+- affichage du **nom**, du **ticker** et du **dernier cours** connu (`pricing_etf`, avec la date).
+
 ---
 
 ## 5. Modèle de données (vue fonctionnelle)
@@ -212,10 +220,12 @@ Base : `inv.db` (surcharge possible via `PORTEFEUILLE_DB`).
 
 | Entité | Rôle |
 | --- | --- |
-| **stocks** | Référentiel : mnémo (`id`), nom, nombre d’actions. |
+| **stocks** | Référentiel actions : mnémo (`id`), nom, nombre d’actions. |
+| **etf** | Référentiel ETF Paris : mnémo (`id`), nom. |
 | **wallet** | Positions détenues : quantité, date d’achat (`JJ/MM/AAAA`), prix, cumul de dividendes. |
 | **walletDetails** | Une seule ligne : liquidité. |
-| **pricing** | Historique quotidien : cours, capitalisation, PER, RSI. Une ligne par (titre, date). |
+| **pricing** | Historique quotidien des actions : cours, capitalisation, PER, RSI. Une ligne par (titre, date). |
+| **pricing_etf** | Historique quotidien des ETF : cours. Une ligne par (titre, date). |
 | **dividends** | Dividendes agrégés par année civile (somme Yahoo). |
 | **results** | Résultat net annuel (Yahoo `income_stmt`). |
 
@@ -232,6 +242,7 @@ Trois jobs indépendants, lançables en parallèle depuis n’importe quel écra
 | ↻ Cours | `get_pricing.py` | Dernier cours, capitalisation, PER, RSI pour **tous** les titres du référentiel. |
 | ↻ Dividendes | `get_dividends.py` | Historique de dividendes par année. |
 | ↻ Résultats | `get_results.py` | Historique de résultat net par année. |
+| ↻ Cours ETF | `get_pricing_etf.py` | Dernier cours des ETF Paris (`etf` → `pricing_etf`). |
 
 Caractéristiques communes :
 
