@@ -1,12 +1,12 @@
 """Récupère le dernier prix connu des ETF de la table `etf` via Yahoo
-Finance et met à jour la table `pricing_etf`.
+Finance et met à jour la table `pricingETF`.
 
 Source : yfinance (`Ticker.history`). Le ticker Yahoo est construit en
 suffixant le mnémo Euronext par ".PA" (ex. "B28A" -> "B28A.PA"), comme
 `get_pricing.py` pour les actions.
 
 Table cible :
-    CREATE TABLE pricing_etf (
+    CREATE TABLE pricingETF (
         id TEXT,
         date TEXT,
         price REAL
@@ -96,8 +96,16 @@ def fetch_last_price(ticker: str) -> tuple[str, float] | None:
 
 
 def ensure_schema(db: sqlite3.Connection) -> None:
+    tables = {
+        row[0]
+        for row in db.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    if "pricing_etf" in tables and "pricingETF" not in tables:
+        db.execute("ALTER TABLE pricing_etf RENAME TO pricingETF")
     db.execute(
-        "CREATE TABLE IF NOT EXISTS pricing_etf ("
+        "CREATE TABLE IF NOT EXISTS pricingETF ("
         "id TEXT, date TEXT, price REAL)"
     )
     db.commit()
@@ -111,11 +119,11 @@ def upsert_pricing(
 ) -> None:
     with _db_lock:
         db.execute(
-            "DELETE FROM pricing_etf WHERE id = ? AND date = ?",
+            "DELETE FROM pricingETF WHERE id = ? AND date = ?",
             (etf_id, date_iso),
         )
         db.execute(
-            "INSERT INTO pricing_etf (id, date, price) VALUES (?, ?, ?)",
+            "INSERT INTO pricingETF (id, date, price) VALUES (?, ?, ?)",
             (etf_id, date_iso, price),
         )
         db.commit()

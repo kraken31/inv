@@ -66,7 +66,7 @@ html, body {
 }
 
 .sidebar {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--panel);
@@ -76,7 +76,52 @@ html, body {
 .sidebar-nav {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.nav-group {
+  border: none;
+}
+
+.nav-group > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.nav-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-group > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  margin-right: 6px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.nav-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.nav-group.current > summary {
+  color: var(--accent);
+}
+
+.nav-sub {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
+  margin-top: 6px;
+  padding-left: 8px;
 }
 
 .sidebar-nav a {
@@ -183,7 +228,19 @@ main {
   font-size: 14px;
 }
 
-.toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+.toolbar select {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  outline: none;
+  font-size: 14px;
+  font-family: inherit;
+  min-width: 200px;
+}
+
+.toolbar select:focus { border-color: var(--accent); }
 
 .wallet-actions {
   display: flex;
@@ -280,9 +337,11 @@ table.wallet tbody tr.row-warn { background: rgba(250, 204, 21, 0.18); }
 table.wallet tbody tr.row-warn:nth-child(even) { background: rgba(250, 204, 21, 0.24); }
 table.wallet tbody tr.row-warn:hover { background: rgba(250, 204, 21, 0.32); }
 
-table.wallet tbody tr.row-mid { background: rgba(251, 146, 60, 0.18); }
-table.wallet tbody tr.row-mid:nth-child(even) { background: rgba(251, 146, 60, 0.24); }
-table.wallet tbody tr.row-mid:hover { background: rgba(251, 146, 60, 0.32); }
+table.wallet tbody tr.row-selected { background: rgba(56, 189, 248, 0.18); }
+table.wallet tbody tr.row-selected:nth-child(even) { background: rgba(56, 189, 248, 0.24); }
+table.wallet tbody tr.row-selected:hover { background: rgba(56, 189, 248, 0.32); }
+
+table.wallet tbody tr.clickable { cursor: pointer; }
 
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -429,6 +488,11 @@ table.summary-table th {
   font-size: 24px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.kpi-value.kpi-text {
+  font-size: 18px;
+  font-variant-numeric: normal;
 }
 
 .kpi-value.good { color: var(--pos); }

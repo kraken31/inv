@@ -150,6 +150,11 @@ def etf_page():
     return render_template("etf.html")
 
 
+@app.route("/portefeuille-etf")
+def portefeuille_etf_page():
+    return render_template("portefeuille_etf.html")
+
+
 @app.route("/securite")
 def securite_page():
     # On dérive l'année « n » depuis la table results : c'est la
@@ -388,6 +393,197 @@ def api_wallet_update(stock_id: str):
     except sqlite3.Error as exc:
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
     return jsonify({"updated": stock_id})
+
+
+@app.route("/api/wallet-etf")
+def api_wallet_etf():
+    query = """
+        WITH latest_price AS (
+            SELECT p.id, p.date, p.price
+            FROM pricingETF p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingETF
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        )
+        SELECT
+            COALESCE(e.name, w.id)     AS name,
+            w.id                       AS id,
+            w.quantity                 AS quantity,
+            w.date                     AS purchase_date,
+            w.price                    AS purchase_price,
+            (w.quantity * w.price)     AS purchase_amount,
+            lp.date                    AS current_date,
+            lp.price                   AS current_price,
+            (w.quantity * lp.price)    AS current_amount,
+            (w.quantity * lp.price - w.quantity * w.price)
+                                       AS plus_minus_value,
+            CASE WHEN w.quantity * w.price > 0
+                 THEN 100.0 * (w.quantity * lp.price
+                               - w.quantity * w.price)
+                            / (w.quantity * w.price)
+            END                        AS perf
+        FROM walletETF w
+        LEFT JOIN etf e            ON e.id = w.id
+        LEFT JOIN latest_price lp  ON lp.id = w.id
+        ORDER BY name COLLATE NOCASE
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify(rows)
+
+
+@app.route("/api/etfs/available")
+def api_etfs_available():
+    """Liste les ETF de `etf` qui ne sont pas encore dans
+    `walletETF`. Sert à peupler le `<select>` de la modale d'ajout.
+    """
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT e.id, COALESCE(e.name, e.id) AS name
+                    FROM etf e
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM walletETF w WHERE w.id = e.id
+                    )
+                    ORDER BY name COLLATE NOCASE
+                    """
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/wallet-etf", methods=["POST"])
+def api_wallet_etf_create():
+    """Ajoute une ligne dans `walletETF`. Refuse si l'id n'existe pas
+    dans `etf` (404) ou si une ligne pour cet id est déjà présente
+    (409).
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        etf_id = str(payload["id"]).strip()
+        quantity = float(payload["quantity"])
+        price = float(payload["price"])
+        date_str = str(payload["date"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Champs invalides"}), 400
+
+    if not etf_id:
+        return jsonify({"error": "ETF requis"}), 400
+    if quantity <= 0:
+        return jsonify({"error": "Quantité doit être > 0"}), 400
+    if price < 0:
+        return jsonify({"error": "Valeurs négatives interdites"}), 400
+    if not math.isfinite(quantity) or not math.isfinite(price):
+        return jsonify({"error": "Valeurs non finies"}), 400
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        return jsonify({"error": "Date invalide (YYYY-MM-DD)"}), 400
+
+    try:
+        with get_db_rw() as conn:
+            if not conn.execute(
+                "SELECT 1 FROM etf WHERE id = ?", (etf_id,)
+            ).fetchone():
+                return jsonify({"error": "ETF inconnu"}), 404
+            if conn.execute(
+                "SELECT 1 FROM walletETF WHERE id = ?", (etf_id,)
+            ).fetchone():
+                return (
+                    jsonify({"error": "ETF déjà dans le portefeuille"}),
+                    409,
+                )
+            conn.execute(
+                "INSERT INTO walletETF (id, quantity, date, price) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    etf_id,
+                    quantity,
+                    iso_to_fr_date(date_str),
+                    price,
+                ),
+            )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"created": etf_id}), 201
+
+
+@app.route("/api/wallet-etf/<etf_id>", methods=["DELETE"])
+def api_wallet_etf_delete(etf_id: str):
+    """Supprime une ligne de `walletETF`. Renvoie 404 si aucune ligne
+    ne correspond.
+    """
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "DELETE FROM walletETF WHERE id = ?", (etf_id,)
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "ETF introuvable"}), 404
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"deleted": etf_id})
+
+
+@app.route("/api/wallet-etf/<etf_id>", methods=["PUT"])
+def api_wallet_etf_update(etf_id: str):
+    """Met à jour quantity / date / price pour la ligne `walletETF`
+    d'id donné. Tous les champs sont requis.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        quantity = float(payload["quantity"])
+        price = float(payload["price"])
+        date_str = str(payload["date"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Champs invalides"}), 400
+
+    if quantity < 0 or price < 0:
+        return jsonify({"error": "Valeurs négatives interdites"}), 400
+    if not math.isfinite(quantity) or not math.isfinite(price):
+        return jsonify({"error": "Valeurs non finies"}), 400
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        return jsonify({"error": "Date invalide (YYYY-MM-DD)"}), 400
+
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "UPDATE walletETF SET quantity = ?, date = ?, "
+                "price = ? WHERE id = ?",
+                (
+                    quantity,
+                    iso_to_fr_date(date_str),
+                    price,
+                    etf_id,
+                ),
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "ETF introuvable"}), 404
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"updated": etf_id})
 
 
 @app.route("/api/per")
@@ -801,25 +997,49 @@ def api_action_detail(stock_id: str):
 @app.route("/api/etf/search")
 def api_etf_search():
     """Autocomplete pour la page ETF : au plus 20 ETF de la table
-    `etf` dont l'id (ticker) ou le nom contient `q`.
+    `etf` dont l'id (ticker) ou le nom contient `q`. Si `category` est
+    fourni, la recherche est limitée à cette classe d'actifs.
     """
     q = (request.args.get("q") or "").strip()
     if not q:
         return jsonify([])
     like = f"%{q}%"
+    category = (request.args.get("category") or "").strip()
+    sql = """
+        SELECT id, COALESCE(name, id) AS name
+        FROM etf
+        WHERE (id LIKE ? OR name LIKE ?)
+    """
+    params = [like, like]
+    if category:
+        sql += " AND category = ?"
+        params.append(category)
+    sql += " ORDER BY name COLLATE NOCASE LIMIT 20"
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(sql, params)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/etf/categories")
+def api_etf_categories():
+    """Liste distincte des catégories justETF renseignées."""
     try:
         with get_db() as conn:
             rows = [
-                dict(r)
+                r["category"]
                 for r in conn.execute(
                     """
-                    SELECT id, COALESCE(name, id) AS name
+                    SELECT DISTINCT category
                     FROM etf
-                    WHERE id LIKE ? OR name LIKE ?
-                    ORDER BY name COLLATE NOCASE
-                    LIMIT 20
-                    """,
-                    (like, like),
+                    WHERE category IS NOT NULL
+                      AND TRIM(category) != ''
+                    ORDER BY category COLLATE NOCASE
+                    """
                 )
             ]
     except FileNotFoundError as exc:
@@ -829,15 +1049,56 @@ def api_etf_search():
     return jsonify(rows)
 
 
+@app.route("/api/etf/list")
+def api_etf_list():
+    """ETF avec dernier cours `pricingETF`. Sans `category` (Tous),
+    renvoie tout le référentiel ; sinon uniquement la classe demandée.
+    """
+    category = (request.args.get("category") or "").strip()
+    query = """
+        WITH latest_price AS (
+            SELECT p.id, p.date, p.price
+            FROM pricingETF p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingETF
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        )
+        SELECT
+            e.id                       AS id,
+            COALESCE(e.name, e.id)     AS name,
+            e.ter                      AS ter,
+            e.category                 AS category,
+            lp.date                    AS price_date,
+            lp.price                   AS price
+        FROM etf e
+        LEFT JOIN latest_price lp ON lp.id = e.id
+    """
+    params = []
+    if category:
+        query += " WHERE e.category = ?"
+        params.append(category)
+    query += " ORDER BY name COLLATE NOCASE"
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query, params)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
 @app.route("/api/etf/<etf_id>")
 def api_etf_detail(etf_id: str):
-    """Fiche d'un ETF : nom, ticker et dernier cours connu
-    (table `pricing_etf`, MAX(date)).
+    """Fiche d'un ETF : nom, ticker, catégorie, TER et dernier cours
+    connu (table `pricingETF`, MAX(date)).
     """
     try:
         with get_db() as conn:
             etf = conn.execute(
-                "SELECT id, COALESCE(name, id) AS name "
+                "SELECT id, COALESCE(name, id) AS name, ter, category "
                 "FROM etf WHERE id = ?",
                 (etf_id,),
             ).fetchone()
@@ -847,7 +1108,7 @@ def api_etf_detail(etf_id: str):
                     404,
                 )
             latest = conn.execute(
-                "SELECT date, price FROM pricing_etf "
+                "SELECT date, price FROM pricingETF "
                 "WHERE id = ? AND price IS NOT NULL "
                 "ORDER BY date DESC LIMIT 1",
                 (etf_id,),
@@ -860,6 +1121,8 @@ def api_etf_detail(etf_id: str):
     return jsonify({
         "id": etf["id"],
         "name": etf["name"],
+        "ter": etf["ter"],
+        "category": etf["category"],
         "price": latest["price"] if latest else None,
         "price_date": latest["date"] if latest else None,
     })
@@ -903,6 +1166,54 @@ def api_liquidite_update():
             if cur.rowcount == 0:
                 conn.execute(
                     "INSERT INTO walletDetails (liquidite) VALUES (?)",
+                    (value,),
+                )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify({"liquidite": value})
+
+
+@app.route("/api/liquidite-etf", methods=["GET"])
+def api_liquidite_etf():
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT liquidite FROM walletETFDetails LIMIT 1"
+            ).fetchone()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify({"liquidite": row["liquidite"] if row else None})
+
+
+@app.route("/api/liquidite-etf", methods=["POST"])
+def api_liquidite_etf_update():
+    """Met à jour (ou insère) la liquidité dans `walletETFDetails`.
+    Table mono-ligne : UPDATE, sinon INSERT.
+    """
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get("liquidite")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Champ 'liquidite' invalide"}), 400
+    if not math.isfinite(value) or value < 0:
+        return jsonify({"error": "Champ 'liquidite' invalide"}), 400
+
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "UPDATE walletETFDetails SET liquidite = ?", (value,)
+            )
+            if cur.rowcount == 0:
+                conn.execute(
+                    "INSERT INTO walletETFDetails (liquidite) VALUES (?)",
                     (value,),
                 )
             conn.commit()

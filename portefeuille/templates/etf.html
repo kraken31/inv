@@ -35,15 +35,7 @@
 
   <div class="layout">
     <aside class="sidebar">
-      <nav class="sidebar-nav">
-        <a href="{{ url_for('index') }}">Portefeuille</a>
-        <a href="{{ url_for('action_page') }}">Action</a>
-        <a href="{{ url_for('per_page') }}">PER</a>
-        <a href="{{ url_for('rsi_page') }}">RSI</a>
-        <a href="{{ url_for('rendement_page') }}">Rendement</a>
-        <a href="{{ url_for('securite_page') }}">Croissance</a>
-        <a href="{{ url_for('etf_page') }}" class="active">ETF</a>
-      </nav>
+      {% include "_sidebar.html" %}
     </aside>
 
     <main>
@@ -54,6 +46,9 @@
                autocomplete="off" />
         <ul id="etf-suggestions" class="autocomplete-list" hidden></ul>
       </div>
+      <select id="etf-category-filter" aria-label="Filtrer par catégorie">
+        <option value="">Tous</option>
+      </select>
     </section>
 
     <div id="status" class="status"></div>
@@ -70,8 +65,29 @@
           <div class="kpi-value" id="etf-price">—</div>
           <div class="kpi-meta" id="etf-price-date"></div>
         </div>
+        <div class="kpi-card">
+          <div class="kpi-label">TER</div>
+          <div class="kpi-value" id="etf-ter">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Catégorie</div>
+          <div class="kpi-value kpi-text" id="etf-category">—</div>
+        </div>
       </div>
     </section>
+
+    <table id="etf-table" class="wallet" hidden>
+      <thead>
+        <tr>
+          <th data-key="name" class="sort">Nom</th>
+          <th data-key="id" class="sort">Ticker</th>
+          <th data-key="ter" class="sort num">TER</th>
+          <th data-key="price" class="sort num">Prix</th>
+          <th data-key="price_date" class="sort">Date</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
     </main>
   </div>
 

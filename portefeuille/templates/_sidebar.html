@@ -1,0 +1,26 @@
+{% set ep = request.endpoint %}
+{% set in_actions = ep in [
+  'index', 'action_page', 'per_page', 'rsi_page',
+  'rendement_page', 'securite_page',
+] %}
+{% set in_etf = ep in ['portefeuille_etf_page', 'etf_page'] %}
+<nav class="sidebar-nav">
+  <details class="nav-group{% if in_actions %} current{% endif %}" open>
+    <summary>Actions</summary>
+    <div class="nav-sub">
+      <a href="{{ url_for('index') }}"{% if ep == 'index' %} class="active"{% endif %}>Portefeuille</a>
+      <a href="{{ url_for('action_page') }}"{% if ep == 'action_page' %} class="active"{% endif %}>Action</a>
+      <a href="{{ url_for('per_page') }}"{% if ep == 'per_page' %} class="active"{% endif %}>PER</a>
+      <a href="{{ url_for('rsi_page') }}"{% if ep == 'rsi_page' %} class="active"{% endif %}>RSI</a>
+      <a href="{{ url_for('rendement_page') }}"{% if ep == 'rendement_page' %} class="active"{% endif %}>Rendement</a>
+      <a href="{{ url_for('securite_page') }}"{% if ep == 'securite_page' %} class="active"{% endif %}>Croissance</a>
+    </div>
+  </details>
+  <details class="nav-group{% if in_etf %} current{% endif %}" open>
+    <summary>ETF</summary>
+    <div class="nav-sub">
+      <a href="{{ url_for('portefeuille_etf_page') }}"{% if ep == 'portefeuille_etf_page' %} class="active"{% endif %}>Portefeuille ETF</a>
+      <a href="{{ url_for('etf_page') }}"{% if ep == 'etf_page' %} class="active"{% endif %}>ETF</a>
+    </div>
+  </details>
+</nav>

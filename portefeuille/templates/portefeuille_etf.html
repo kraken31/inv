@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Portefeuille</title>
+  <title>Portefeuille ETF</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body>
   <header class="topbar">
-    <h1>Portefeuille</h1>
+    <h1>Portefeuille ETF</h1>
     <nav class="nav">
       <button id="refresh-pricing" type="button" class="nav-action"
               title="Lance get_pricing.py pour rafraîchir les cours">
@@ -40,7 +40,7 @@
 
     <main>
     <section class="toolbar">
-      <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
+      <input type="search" id="search" placeholder="Rechercher (nom ou ticker)…" />
       <button id="reload" type="button">Actualiser</button>
     </section>
 
@@ -52,7 +52,6 @@
           <th class="num">Valeur achat</th>
           <th>Date valorisation</th>
           <th class="num">Valorisation</th>
-          <th class="num">Dividendes</th>
           <th class="num">Liquidité</th>
           <th class="num">+/- Value</th>
           <th class="num">Perf</th>
@@ -63,7 +62,6 @@
           <td class="num" id="s-purchase"></td>
           <td id="s-date"></td>
           <td class="num" id="s-current"></td>
-          <td class="num" id="s-dividend"></td>
           <td class="num" id="s-liquidite"></td>
           <td class="num" id="s-plus-minus"></td>
           <td class="num" id="s-perf"></td>
@@ -73,7 +71,7 @@
 
     <section class="wallet-actions">
       <button id="add-action" type="button" class="add-action"
-              title="Ajouter une action au portefeuille">+ Ajouter</button>
+              title="Ajouter un ETF au portefeuille">+ Ajouter</button>
     </section>
 
     <table id="wallet-table" class="wallet">
@@ -85,15 +83,11 @@
           <th data-key="purchase_date" class="sort">Date achat</th>
           <th data-key="purchase_price" class="sort num">Prix achat</th>
           <th data-key="purchase_amount" class="sort num">Montant achat</th>
-          <th data-key="dividend" class="sort num">Dividende</th>
           <th data-key="current_date" class="sort">Date</th>
           <th data-key="current_price" class="sort num">Prix</th>
           <th data-key="current_amount" class="sort num">Montant</th>
-          <th data-key="perf_div" class="sort num">Perf Div</th>
           <th data-key="plus_minus_value" class="sort num">+/- Value</th>
           <th data-key="perf" class="sort num">Perf</th>
-          <th data-key="per" class="sort num">PER</th>
-          <th data-key="rsi" class="sort num">RSI</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -103,7 +97,7 @@
 
   <dialog id="delete-dialog" class="modal">
     <form method="dialog" class="modal-form">
-      <h2 class="modal-title">Supprimer cette action ?</h2>
+      <h2 class="modal-title">Supprimer cet ETF ?</h2>
       <p class="modal-text" id="delete-message"></p>
       <div class="modal-actions">
         <button type="submit" value="cancel" class="modal-btn">Annuler</button>
@@ -116,16 +110,16 @@
 
   <dialog id="add-dialog" class="modal">
     <form method="dialog" class="modal-form">
-      <h2 class="modal-title">Ajouter une action</h2>
+      <h2 class="modal-title">Ajouter un ETF</h2>
       <label class="modal-field">
-        <span>Action</span>
+        <span>ETF</span>
         <select id="add-id" required>
-          <option value="">— Choisir une action —</option>
+          <option value="">— Choisir un ETF —</option>
         </select>
       </label>
       <label class="modal-field">
         <span>Quantité</span>
-        <input type="number" id="add-quantity" step="1" min="1" required />
+        <input type="number" id="add-quantity" step="0.0001" min="0.0001" required />
       </label>
       <label class="modal-field">
         <span>Date d'achat</span>
@@ -138,17 +132,6 @@
           id="add-price"
           step="0.0001"
           min="0"
-          required
-        />
-      </label>
-      <label class="modal-field">
-        <span>Dividende (€)</span>
-        <input
-          type="number"
-          id="add-dividend"
-          step="0.01"
-          min="0"
-          value="0"
           required
         />
       </label>
@@ -166,7 +149,7 @@
       <h2 class="modal-title" id="edit-title">Modifier la ligne</h2>
       <label class="modal-field">
         <span>Quantité</span>
-        <input type="number" id="edit-quantity" step="1" min="0" required />
+        <input type="number" id="edit-quantity" step="0.0001" min="0" required />
       </label>
       <label class="modal-field">
         <span>Date d'achat</span>
@@ -178,16 +161,6 @@
           type="number"
           id="edit-price"
           step="0.0001"
-          min="0"
-          required
-        />
-      </label>
-      <label class="modal-field">
-        <span>Dividende (€)</span>
-        <input
-          type="number"
-          id="edit-dividend"
-          step="0.01"
           min="0"
           required
         />
@@ -223,7 +196,7 @@
     </form>
   </dialog>
 
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script src="{{ url_for('static', filename='portefeuille_etf.js') }}"></script>
   <script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>
 </html>

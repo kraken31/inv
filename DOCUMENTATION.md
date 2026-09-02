@@ -119,7 +119,10 @@ Sur l’écran Croissance, l’année **n** n’est pas l’année calendaire : 
 
 ## 4. Écrans
 
-Navigation latérale commune : Portefeuille, Action, PER, RSI, Rendement, Croissance, ETF.
+Navigation latérale commune, en deux menus :
+
+- **Actions** : Portefeuille, Action, PER, RSI, Rendement, Croissance ;
+- **ETF** : Portefeuille ETF, ETF.
 
 Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats**, **↻ Cours ETF** (voir § 6).
 
@@ -209,8 +212,22 @@ Les résultats sont affichés en notation compacte. Export CSV.
 Fiche d’un ETF du référentiel Paris (table `etf`).
 
 - recherche avec **autocomplétion** (nom ou ticker, 20 résultats max) ;
-- URL bookmarkable : `/etf?id=B28A` ;
-- affichage du **nom**, du **ticker** et du **dernier cours** connu (`pricing_etf`, avec la date).
+- **filtre par catégorie** justETF : option **Tous** (tout le référentiel) ou une classe (Actions, Obligations, …) ; un clic sur une ligne ouvre la fiche (prix, TER, catégorie). La recherche par mot-clé (nom / ticker) est limitée aux ETF de la catégorie sélectionnée ;
+- URL bookmarkable : `/etf?id=B28A` ou `/etf?category=Obligations&id=B28A` ;
+- affichage du **nom**, du **ticker**, du **dernier cours** connu (`pricingETF`, avec la date), du **TER** et de la **catégorie** justETF lorsqu’ils sont disponibles (sinon « — » ; TER : repli Yahoo si justETF n’a pas la fiche).
+
+### 4.8 Portefeuille ETF (`/portefeuille-etf`)
+
+Même écran que le portefeuille actions, appliqué aux positions `walletETF` :
+
+- **pas** de dividendes, ni de PER, ni de RSI ;
+- valorisation via `pricingETF` ;
+- liquidité propre (`walletETFDetails`) ;
+- le nom d’une ligne ouvre la fiche `/etf?id=…`.
+
+**Synthèse** : valeur d’achat, date de valorisation, valorisation, liquidité, +/- value, perf.
+
+**Actions** : + Ajouter (ETF absents du portefeuille), modifier quantité / date / prix, supprimer.
 
 ---
 
@@ -221,15 +238,17 @@ Base : `inv.db` (surcharge possible via `PORTEFEUILLE_DB`).
 | Entité | Rôle |
 | --- | --- |
 | **stocks** | Référentiel actions : mnémo (`id`), nom, nombre d’actions. |
-| **etf** | Référentiel ETF Paris : mnémo (`id`), nom. |
-| **wallet** | Positions détenues : quantité, date d’achat (`JJ/MM/AAAA`), prix, cumul de dividendes. |
-| **walletDetails** | Une seule ligne : liquidité. |
+| **etf** | Référentiel ETF Paris : mnémo (`id`), ISIN, nom long Yahoo, TER en % (`ter`), catégorie justETF (`category` : Actions, Obligations, etc.). |
+| **wallet** | Positions actions : quantité, date d’achat (`JJ/MM/AAAA`), prix, cumul de dividendes. |
+| **walletETF** | Positions ETF : mnémo (`id`), quantité, prix d’achat, date d’achat (`JJ/MM/AAAA`). |
+| **walletDetails** | Une seule ligne : liquidité du portefeuille actions. |
+| **walletETFDetails** | Une seule ligne : liquidité du portefeuille ETF. |
 | **pricing** | Historique quotidien des actions : cours, capitalisation, PER, RSI. Une ligne par (titre, date). |
-| **pricing_etf** | Historique quotidien des ETF : cours. Une ligne par (titre, date). |
+| **pricingETF** | Historique quotidien des ETF : cours. Une ligne par (titre, date). |
 | **dividends** | Dividendes agrégés par année civile (somme Yahoo). |
 | **results** | Résultat net annuel (Yahoo `income_stmt`). |
 
-Les lectures métier se font en **lecture seule**. Les écritures UI concernent uniquement `wallet` et `walletDetails`. Les tables de marché sont mises à jour par les scripts de refresh.
+Les lectures métier se font en **lecture seule**. Les écritures UI concernent `wallet`, `walletDetails`, `walletETF` et `walletETFDetails`. Les tables de marché sont mises à jour par les scripts de refresh.
 
 ---
 
@@ -242,7 +261,7 @@ Trois jobs indépendants, lançables en parallèle depuis n’importe quel écra
 | ↻ Cours | `get_pricing.py` | Dernier cours, capitalisation, PER, RSI pour **tous** les titres du référentiel. |
 | ↻ Dividendes | `get_dividends.py` | Historique de dividendes par année. |
 | ↻ Résultats | `get_results.py` | Historique de résultat net par année. |
-| ↻ Cours ETF | `get_pricing_etf.py` | Dernier cours des ETF Paris (`etf` → `pricing_etf`). |
+| ↻ Cours ETF | `get_pricing_etf.py` | Dernier cours des ETF Paris (`etf` → `pricingETF`). |
 
 Caractéristiques communes :
 
@@ -251,7 +270,7 @@ Caractéristiques communes :
 - 3 workers, backoff en cas de rate-limit (5 / 15 / 45 s) ;
 - **idempotents** : on écrase seulement les (id, date) ou (id, année) renvoyés ; le reste de l’historique est conservé.
 
-Le référentiel lui-même (`get_stocks.py`) n’est **pas** exposé dans l’UI : il se lance en ligne de commande. Il télécharge le CSV officiel Euronext (`mics=XPAR,ALXP`), ne garde que les lignes dont le marché mentionne « Paris », puis enrichit nom et flottant via Yahoo.
+Les référentiels `get_stocks.py` et `get_etfs.py` ne sont **pas** exposés dans l’UI : ils se lancent en ligne de commande. `get_stocks.py` télécharge le CSV officiel Euronext (`mics=XPAR,ALXP`), ne garde que les lignes dont le marché mentionne « Paris », puis enrichit nom et flottant via Yahoo. `get_etfs.py` fait de même pour les ETP Paris (`mics=XPAR`) : nom Yahoo, ISIN Euronext, TER et catégorie justETF (fiche `etf-profile.html?isin=…`). Si justETF n’a pas la fiche, repli TER sur Yahoo `netExpenseRatio` (0 ou absent → `NULL`).
 
 ---
 
@@ -270,7 +289,7 @@ Le référentiel lui-même (`get_stocks.py`) n’est **pas** exposé dans l’UI
 - **Pas de lots multiples** : une position = un titre.
 - **Dividendes du portefeuille** : saisie manuelle (cumul), distincte de l’historique Yahoo utilisé pour le screening.
 - **Cours différés** : clôture Yahoo, pas le carnet d’ordres Euronext.
-- **Couverture Yahoo** : titres délistés, illiquides ou mal mappés peuvent n’avoir ni cours, ni PER, ni dividendes.
+- **Couverture Yahoo** : titres délistés, illiquides ou mal mappés peuvent n’avoir ni cours, ni PER, ni dividendes. Le TER ETF vient de justETF (plus complet que Yahoo) ; quelques produits Paris hors justETF restent à « — ».
 - **Rate-limit Yahoo** : un refresh complet du référentiel (~600 titres) peut durer plusieurs minutes.
 - **Application locale** : `127.0.0.1`, port 5001 par défaut (`PORT` surchargeable). Aucune auth.
 
@@ -291,7 +310,10 @@ Scripts de données (venv activé, à la racine du projet) :
 
 ```bash
 python get_stocks.py      # référentiel Euronext Paris
+python get_etfs.py        # référentiel ETF Paris (noms Yahoo + TER/catégorie justETF)
+python get_etfs.py --justetf  # TER + catégorie justETF seulement
 python get_pricing.py     # cours / PER / RSI
+python get_pricing_etf.py # cours ETF
 python get_dividends.py   # dividendes
 python get_results.py     # résultats nets
 ```

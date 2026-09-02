@@ -35,15 +35,7 @@
 
   <div class="layout">
     <aside class="sidebar">
-      <nav class="sidebar-nav">
-        <a href="{{ url_for('index') }}">Portefeuille</a>
-        <a href="{{ url_for('action_page') }}">Action</a>
-        <a href="{{ url_for('per_page') }}">PER</a>
-        <a href="{{ url_for('rsi_page') }}">RSI</a>
-        <a href="{{ url_for('rendement_page') }}" class="active">Rendement</a>
-        <a href="{{ url_for('securite_page') }}">Croissance</a>
-        <a href="{{ url_for('etf_page') }}">ETF</a>
-      </nav>
+      {% include "_sidebar.html" %}
     </aside>
 
     <main>
