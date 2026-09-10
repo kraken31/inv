@@ -15,6 +15,10 @@ Table cible :
 - date  : date du dernier prix connu, au format YYYY-MM-DD
 - price : dernier cours de clôture connu
 
+Hors séance, Yahoo laisse souvent la dernière ligne d'historique avec
+un Close vide. On complète alors avec le dernier cours coté
+(`fast_info.last_price`), typiquement la clôture de la veille.
+
 Le script est idempotent et reprenable : pour chaque ETF on écrase
 uniquement la ligne (id, date) — les autres dates déjà présentes sont
 conservées.
@@ -24,6 +28,7 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, timedelta
 
 import pandas as pd
 import yfinance as yf
@@ -34,20 +39,86 @@ DB_PATH = "/home/aurelien/dev/div/inv/inv.db"
 MAX_WORKERS = 3
 RATE_LIMIT_BACKOFF = (5, 15, 45)
 HISTORY_PERIOD = "5d"
+HISTORY_FALLBACK_DAYS = 14
 
 _db_lock = threading.Lock()
 
 
+def _as_price(value) -> float | None:
+    try:
+        if value is None or pd.isna(value):
+            return None
+        price = float(value)
+    except (TypeError, ValueError):
+        return None
+    if price <= 0:
+        return None
+    return price
+
+
+def _index_to_iso(ts) -> str | None:
+    try:
+        return ts.strftime("%Y-%m-%d")
+    except AttributeError:
+        try:
+            return pd.to_datetime(ts).strftime("%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
+
+
+def _inferred_last_session_date() -> str:
+    d = date.today() - timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d.isoformat()
+
+
+def _quote_last_price(yticker: yf.Ticker) -> float | None:
+    try:
+        info = yticker.fast_info
+    except Exception:
+        return None
+    for attr in (
+        "last_price",
+        "regular_market_previous_close",
+        "previous_close",
+    ):
+        try:
+            price = _as_price(getattr(info, attr, None))
+        except Exception:
+            continue
+        if price is not None:
+            return price
+    return None
+
+
+def _download_history(yticker: yf.Ticker) -> pd.DataFrame | None:
+    df = yticker.history(period=HISTORY_PERIOD)
+    if df is not None and not df.empty and "Close" in df.columns:
+        return df
+    end = date.today() + timedelta(days=1)
+    start = date.today() - timedelta(days=HISTORY_FALLBACK_DAYS)
+    df = yticker.history(start=start.isoformat(), end=end.isoformat())
+    if df is None or df.empty or "Close" not in df.columns:
+        return None
+    return df
+
+
 def fetch_last_price(ticker: str) -> tuple[str, float] | None:
     """Retourne (date_iso, price) du dernier cours de clôture connu.
-    Gère le rate-limit avec backoff. Renvoie None si Yahoo n'a pas
-    d'historique. Lève l'exception sur autre erreur après les retries.
+    Gère le rate-limit avec backoff. Renvoie None si Yahoo n'a ni
+    historique ni cotation. Lève l'exception sur autre erreur après
+    les retries.
+
+    Hors séance, complète une dernière bougie Close=NaN avec le
+    dernier cours coté (typiquement la veille).
     """
     last_exc: Exception | None = None
     attempts = len(RATE_LIMIT_BACKOFF) + 1
+    yticker = yf.Ticker(ticker)
     for attempt in range(attempts):
         try:
-            df = yf.Ticker(ticker).history(period=HISTORY_PERIOD)
+            df = _download_history(yticker)
         except YFRateLimitError as exc:
             last_exc = exc
             if attempt < len(RATE_LIMIT_BACKOFF):
@@ -59,36 +130,33 @@ def fetch_last_price(ticker: str) -> tuple[str, float] | None:
         except Exception:
             raise
         else:
-            if df is None or df.empty or "Close" not in df.columns:
+            quote_price: float | None = None
+
+            if df is not None and not df.empty:
+                last_close = df["Close"].iloc[-1]
+                if pd.isna(last_close):
+                    quote_price = _quote_last_price(yticker)
+                    if quote_price is not None:
+                        df = df.copy()
+                        df.loc[df.index[-1], "Close"] = quote_price
+
+                close = df["Close"].dropna()
+                if not close.empty:
+                    date_iso = _index_to_iso(close.index[-1])
+                    price = _as_price(close.iloc[-1])
+                    if date_iso is not None and price is not None:
+                        return date_iso, price
+
+            if quote_price is None:
+                quote_price = _quote_last_price(yticker)
+            if quote_price is None:
                 return None
 
-            close = df["Close"].dropna()
-            if close.empty:
-                return None
-
-            ts = close.index[-1]
-            value = close.iloc[-1]
-
-            try:
-                if pd.isna(value):
-                    return None
-            except TypeError:
-                pass
-
-            try:
-                date_iso = ts.strftime("%Y-%m-%d")
-            except AttributeError:
-                try:
-                    date_iso = pd.to_datetime(ts).strftime("%Y-%m-%d")
-                except (ValueError, TypeError):
-                    return None
-
-            try:
-                price = float(value)
-            except (TypeError, ValueError):
-                return None
-
-            return date_iso, price
+            if df is not None and not df.empty:
+                date_iso = _index_to_iso(df.index[-1])
+                if date_iso is not None:
+                    return date_iso, quote_price
+            return _inferred_last_session_date(), quote_price
 
     if last_exc is not None:
         raise last_exc
