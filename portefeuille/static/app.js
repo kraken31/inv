@@ -239,7 +239,7 @@ function selectedOwner() {
 function showListView() {
   listView.hidden = false;
   walletView.hidden = true;
-  document.title = "Portefeuille";
+  document.title = "Investissements";
 }
 
 function showWalletView(owner) {
@@ -247,7 +247,7 @@ function showWalletView(owner) {
   walletView.hidden = false;
   state.proprietaire = owner;
   walletTitle.textContent = owner;
-  document.title = `Portefeuille — ${owner}`;
+  document.title = `Investissements — ${owner}`;
 }
 
 function renderPortfolios() {
