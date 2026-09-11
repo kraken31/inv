@@ -20,6 +20,10 @@ const nfTer = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const nfRsi = new Intl.NumberFormat("fr-FR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 
 const state = {
   rows: [],
@@ -55,6 +59,24 @@ function formatDate(s) {
   if (!s) return "";
   const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+
+function formatRsi(v) {
+  return v != null && !Number.isNaN(v) ? nfRsi.format(v) : "";
+}
+
+function rsiClass(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  if (v < 30) return "good";
+  if (v > 70) return "bad";
+  return "";
+}
+
+function rsiCellClass(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  if (v < 30) return "rsi-low";
+  if (v > 70) return "rsi-high";
+  return "";
 }
 
 function parseDateLike(s) {
@@ -225,6 +247,16 @@ function renderDetail(data) {
   const catEl = document.getElementById("etf-category");
   catEl.textContent = data.category ? data.category : "—";
 
+  const rsiEl = document.getElementById("etf-rsi");
+  rsiEl.textContent =
+    data.rsi != null && !Number.isNaN(data.rsi) ? formatRsi(data.rsi) : "—";
+  rsiEl.classList.remove("good", "bad");
+  const rsiCls = rsiClass(data.rsi);
+  if (rsiCls) rsiEl.classList.add(rsiCls);
+  document.getElementById("etf-rsi-date").textContent = data.rsi_date
+    ? `au ${formatDate(data.rsi_date)}`
+    : "";
+
   detailEl.hidden = false;
 }
 
@@ -247,6 +279,7 @@ function renderTable() {
       <td>${escapeHtml(r.id || "")}</td>
       <td class="num">${r.ter != null ? formatTer(r.ter) : ""}</td>
       <td class="num">${r.price != null ? formatNum(r.price) : ""}</td>
+      <td class="num ${rsiCellClass(r.rsi)}">${formatRsi(r.rsi)}</td>
       <td>${escapeHtml(formatDate(r.price_date))}</td>
     `;
     tbody.appendChild(tr);

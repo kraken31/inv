@@ -1,6 +1,6 @@
 /**
  * Page Portefeuille ETF : identique au portefeuille actions, sans
- * dividendes, PER ni RSI. Données : `walletETF`, `walletETFDetails`,
+ * dividendes ni PER. Données : `walletETF`, `walletETFDetails`,
  * `pricingETF`. Le nom d'une ligne ouvre la fiche `/etf?id=…`.
  */
 const state = {
@@ -34,9 +34,24 @@ const nfPct = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const nfRsi = new Intl.NumberFormat("fr-FR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
 
 function fmtPct(v) {
   return v == null || Number.isNaN(v) ? "" : `${nfPct.format(v)}\u00A0%`;
+}
+
+function fmtRsi(v) {
+  return v == null || Number.isNaN(v) ? "" : nfRsi.format(v);
+}
+
+function rsiClass(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  if (v < 30) return "rsi-low";
+  if (v > 70) return "rsi-high";
+  return "";
 }
 
 function signClass(v) {
@@ -171,6 +186,7 @@ function render() {
       <td class="num">${r.current_amount != null ? nfEur.format(r.current_amount) : ""}</td>
       <td class="num ${signClass(r.plus_minus_value)}">${r.plus_minus_value != null ? nfEur.format(r.plus_minus_value) : ""}</td>
       <td class="num ${signClass(r.perf)}">${fmtPct(r.perf)}</td>
+      <td class="num ${rsiClass(r.rsi)}">${fmtRsi(r.rsi)}</td>
     `;
     tbody.appendChild(tr);
   }

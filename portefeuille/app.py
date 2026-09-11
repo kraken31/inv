@@ -168,6 +168,11 @@ def ensure_schema() -> None:
                 "walletETFDetails",
             ):
                 _ensure_proprietaire_column(conn, table)
+            pricing_etf_cols = _table_columns(conn, "pricingETF")
+            if pricing_etf_cols and "rsi" not in pricing_etf_cols:
+                conn.execute(
+                    "ALTER TABLE pricingETF ADD COLUMN rsi REAL"
+                )
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS "
                 "wallet_proprietaire_id "
@@ -907,7 +912,7 @@ def api_wallet_etf():
 
     query = """
         WITH latest_price AS (
-            SELECT p.id, p.date, p.price
+            SELECT p.id, p.date, p.price, p.rsi
             FROM pricingETF p
             JOIN (
                 SELECT id, MAX(date) AS max_date
@@ -925,6 +930,7 @@ def api_wallet_etf():
             lp.date                    AS current_date,
             lp.price                   AS current_price,
             (w.quantity * lp.price)    AS current_amount,
+            lp.rsi                     AS rsi,
             (w.quantity * lp.price - w.quantity * w.price)
                                        AS plus_minus_value,
             CASE WHEN w.quantity * w.price > 0
@@ -1611,7 +1617,7 @@ def api_etf_list():
     category = (request.args.get("category") or "").strip()
     query = """
         WITH latest_price AS (
-            SELECT p.id, p.date, p.price
+            SELECT p.id, p.date, p.price, p.rsi
             FROM pricingETF p
             JOIN (
                 SELECT id, MAX(date) AS max_date
@@ -1625,7 +1631,8 @@ def api_etf_list():
             e.ter                      AS ter,
             e.category                 AS category,
             lp.date                    AS price_date,
-            lp.price                   AS price
+            lp.price                   AS price,
+            lp.rsi                     AS rsi
         FROM etf e
         LEFT JOIN latest_price lp ON lp.id = e.id
     """
@@ -1646,8 +1653,8 @@ def api_etf_list():
 
 @app.route("/api/etf/<etf_id>")
 def api_etf_detail(etf_id: str):
-    """Fiche d'un ETF : nom, ticker, catégorie, TER et dernier cours
-    connu (table `pricingETF`, MAX(date)).
+    """Fiche d'un ETF : nom, ticker, catégorie, TER, dernier cours
+    et RSI (table `pricingETF`).
     """
     try:
         with get_db() as conn:
@@ -1667,6 +1674,12 @@ def api_etf_detail(etf_id: str):
                 "ORDER BY date DESC LIMIT 1",
                 (etf_id,),
             ).fetchone()
+            latest_rsi = conn.execute(
+                "SELECT date, rsi FROM pricingETF "
+                "WHERE id = ? AND rsi IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1",
+                (etf_id,),
+            ).fetchone()
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
     except sqlite3.Error as exc:
@@ -1679,6 +1692,8 @@ def api_etf_detail(etf_id: str):
         "category": etf["category"],
         "price": latest["price"] if latest else None,
         "price_date": latest["date"] if latest else None,
+        "rsi": latest_rsi["rsi"] if latest_rsi else None,
+        "rsi_date": latest_rsi["date"] if latest_rsi else None,
     })
 
 
