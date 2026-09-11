@@ -10,9 +10,15 @@ const state = {
   sortDir: "asc",
   query: "",
   liquidite: null,
+  proprietaire: null,
+  portfolios: [],
 };
 
 const tbody = document.querySelector("#wallet-table tbody");
+const listTbody = document.querySelector("#portefeuilles-table tbody");
+const listView = document.getElementById("list-view");
+const walletView = document.getElementById("wallet-view");
+const walletTitle = document.getElementById("wallet-title");
 const statusEl = document.getElementById("status");
 const searchEl = document.getElementById("search");
 const reloadEl = document.getElementById("reload");
@@ -23,6 +29,7 @@ const nfEur = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 2,
 });
 const nfNum = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
+const nfInt = new Intl.NumberFormat("fr-FR");
 const nfPct = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -197,6 +204,97 @@ function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
+function ownerParam(name = state.proprietaire) {
+  return `proprietaire=${encodeURIComponent(name)}`;
+}
+
+function selectedOwner() {
+  return new URLSearchParams(window.location.search).get("proprietaire");
+}
+
+function showListView() {
+  listView.hidden = false;
+  walletView.hidden = true;
+  document.title = "Portefeuille ETF";
+}
+
+function showWalletView(owner) {
+  listView.hidden = true;
+  walletView.hidden = false;
+  state.proprietaire = owner;
+  walletTitle.textContent = owner;
+  document.title = `Portefeuille ETF — ${owner}`;
+}
+
+function renderPortfolios() {
+  listTbody.innerHTML = "";
+  if (!state.portfolios.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      '<td class="empty" colspan="8">Aucun portefeuille</td>';
+    listTbody.appendChild(tr);
+    return;
+  }
+  for (const r of state.portfolios) {
+    const tr = document.createElement("tr");
+    tr.classList.add("clickable");
+    const plusMinus = Number(r.plus_minus_value) || 0;
+    tr.innerHTML = `
+      <td>${escapeHtml(r.proprietaire)}</td>
+      <td class="num">${nfInt.format(r.nb_lignes ?? 0)}</td>
+      <td class="num">${nfEur.format(r.purchase_amount ?? 0)}</td>
+      <td>${escapeHtml(formatCurrentDate(r.current_date))}</td>
+      <td class="num">${nfEur.format(r.current_amount ?? 0)}</td>
+      <td class="num">${r.liquidite != null ? nfEur.format(r.liquidite) : ""}</td>
+      <td class="num ${signClass(plusMinus)}">${nfEur.format(plusMinus)}</td>
+      <td class="num ${signClass(r.perf)}">${fmtPct(r.perf)}</td>
+    `;
+    tr.addEventListener("click", () => {
+      window.location.href =
+        `/portefeuille-etf?${ownerParam(r.proprietaire)}`;
+    });
+    listTbody.appendChild(tr);
+  }
+}
+
+async function loadPortfolios() {
+  setStatus("Chargement…");
+  try {
+    const resp = await fetch("/api/portefeuilles-etf");
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    state.portfolios = await resp.json();
+    setStatus("");
+    renderPortfolios();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+}
+
+function fillEtfSelect(selectEl, etfs) {
+  const opts = ['<option value="">— Choisir un ETF —</option>'];
+  for (const s of etfs) {
+    opts.push(
+      `<option value="${escapeHtml(s.id)}">` +
+        `${escapeHtml(s.name)} (${escapeHtml(s.id)})</option>`,
+    );
+  }
+  selectEl.innerHTML = opts.join("");
+}
+
+async function boot() {
+  const owner = selectedOwner();
+  if (owner) {
+    showWalletView(owner);
+    await loadData();
+  } else {
+    showListView();
+    await loadPortfolios();
+  }
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;",
@@ -210,9 +308,10 @@ function escapeHtml(s) {
 async function loadData() {
   setStatus("Chargement…");
   try {
+    const q = ownerParam();
     const [walletResp, liquiditeResp] = await Promise.all([
-      fetch("/api/wallet-etf"),
-      fetch("/api/liquidite-etf"),
+      fetch(`/api/wallet-etf?${q}`),
+      fetch(`/api/liquidite-etf?${q}`),
     ]);
     if (!walletResp.ok) {
       const err = await walletResp.json().catch(() => ({}));
@@ -277,7 +376,10 @@ liquiditeDialog.addEventListener("close", async () => {
     const resp = await fetch("/api/liquidite-etf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ liquidite: value }),
+      body: JSON.stringify({
+        liquidite: value,
+        proprietaire: state.proprietaire,
+      }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -336,7 +438,7 @@ deleteDialog.addEventListener("close", async () => {
   try {
     setStatus("Suppression…");
     const resp = await fetch(
-      `/api/wallet-etf/${encodeURIComponent(id)}`,
+      `/api/wallet-etf/${encodeURIComponent(id)}?${ownerParam()}`,
       { method: "DELETE" },
     );
     if (!resp.ok) {
@@ -358,6 +460,7 @@ editDialog.addEventListener("close", async () => {
     quantity: Number(editQuantity.value),
     date: editDate.value,
     price: Number(editPrice.value),
+    proprietaire: state.proprietaire,
   };
   if (
     !Number.isFinite(body.quantity) ||
@@ -369,11 +472,14 @@ editDialog.addEventListener("close", async () => {
   }
   try {
     setStatus("Mise à jour…");
-    const resp = await fetch(`/api/wallet-etf/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const resp = await fetch(
+      `/api/wallet-etf/${encodeURIComponent(id)}?${ownerParam()}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
@@ -395,20 +501,13 @@ const addPrice = document.getElementById("add-price");
 addBtn.addEventListener("click", async () => {
   try {
     setStatus("Chargement des ETF disponibles…");
-    const resp = await fetch("/api/etfs/available");
+    const resp = await fetch(`/api/etfs/available?${ownerParam()}`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
     }
     const etfs = await resp.json();
-    const opts = ['<option value="">— Choisir un ETF —</option>'];
-    for (const s of etfs) {
-      opts.push(
-        `<option value="${escapeHtml(s.id)}">` +
-          `${escapeHtml(s.name)} (${escapeHtml(s.id)})</option>`,
-      );
-    }
-    addId.innerHTML = opts.join("");
+    fillEtfSelect(addId, etfs);
     addId.value = "";
     addQuantity.value = "";
     addDate.value = todayIso();
@@ -430,6 +529,7 @@ addDialog.addEventListener("close", async () => {
     quantity: Number(addQuantity.value),
     date: addDate.value,
     price: Number(addPrice.value),
+    proprietaire: state.proprietaire,
   };
   if (
     !body.id ||
@@ -459,4 +559,75 @@ addDialog.addEventListener("close", async () => {
   }
 });
 
-loadData();
+const createBtn = document.getElementById("create-portefeuille");
+const createDialog = document.getElementById("create-dialog");
+const createProprietaire = document.getElementById("create-proprietaire");
+const createId = document.getElementById("create-id");
+const createQuantity = document.getElementById("create-quantity");
+const createDate = document.getElementById("create-date");
+const createPrice = document.getElementById("create-price");
+
+createBtn.addEventListener("click", async () => {
+  try {
+    setStatus("Chargement des ETF…");
+    const resp = await fetch("/api/etfs");
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const etfs = await resp.json();
+    fillEtfSelect(createId, etfs);
+    createProprietaire.value = "";
+    createId.value = "";
+    createQuantity.value = "";
+    createDate.value = todayIso();
+    createPrice.value = "";
+    setStatus("");
+    if (typeof createDialog.showModal === "function") {
+      createDialog.showModal();
+      createProprietaire.focus();
+    }
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+createDialog.addEventListener("close", async () => {
+  if (createDialog.returnValue !== "save") return;
+  const body = {
+    proprietaire: createProprietaire.value.trim(),
+    id: createId.value,
+    quantity: Number(createQuantity.value),
+    date: createDate.value,
+    price: Number(createPrice.value),
+  };
+  if (
+    !body.proprietaire ||
+    !body.id ||
+    !Number.isFinite(body.quantity) ||
+    body.quantity <= 0 ||
+    !Number.isFinite(body.price) ||
+    !body.date
+  ) {
+    setStatus("Champs invalides", true);
+    return;
+  }
+  try {
+    setStatus("Création du portefeuille…");
+    const resp = await fetch("/api/portefeuilles-etf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    window.location.href =
+      `/portefeuille-etf?${ownerParam(body.proprietaire)}`;
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+boot();

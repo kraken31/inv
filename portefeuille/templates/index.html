@@ -39,12 +39,41 @@
     </aside>
 
     <main>
+    <div id="status" class="status"></div>
+
+    <section id="list-view">
+      <section class="wallet-actions">
+        <button id="create-portefeuille" type="button" class="add-action"
+                title="Créer un nouveau portefeuille">Créer</button>
+      </section>
+      <table id="portefeuilles-table" class="wallet">
+        <thead>
+          <tr>
+            <th>Propriétaire</th>
+            <th class="num">Titres</th>
+            <th class="num">Valeur achat</th>
+            <th>Date valorisation</th>
+            <th class="num">Valorisation</th>
+            <th class="num">Dividendes</th>
+            <th class="num">Liquidité</th>
+            <th class="num">+/- Value</th>
+            <th class="num">Perf</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="wallet-view" hidden>
+    <p class="view-nav">
+      <a href="/" class="back-link">← Tous les portefeuilles</a>
+    </p>
+    <h2 class="page-subtitle" id="wallet-title"></h2>
+
     <section class="toolbar">
       <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
       <button id="reload" type="button">Actualiser</button>
     </section>
-
-    <div id="status" class="status"></div>
 
     <table id="summary-table" class="wallet summary-table">
       <thead>
@@ -98,6 +127,7 @@
       </thead>
       <tbody></tbody>
     </table>
+    </section>
     </main>
   </div>
 
@@ -109,6 +139,57 @@
         <button type="submit" value="cancel" class="modal-btn">Annuler</button>
         <button type="submit" value="delete" class="modal-btn danger">
           Supprimer
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="create-dialog" class="modal">
+    <form method="dialog" class="modal-form">
+      <h2 class="modal-title">Créer un portefeuille</h2>
+      <label class="modal-field">
+        <span>Propriétaire</span>
+        <input type="text" id="create-proprietaire" maxlength="80" required />
+      </label>
+      <label class="modal-field">
+        <span>Première action</span>
+        <select id="create-id" required>
+          <option value="">— Choisir une action —</option>
+        </select>
+      </label>
+      <label class="modal-field">
+        <span>Quantité</span>
+        <input type="number" id="create-quantity" step="1" min="1" required />
+      </label>
+      <label class="modal-field">
+        <span>Date d'achat</span>
+        <input type="date" id="create-date" required />
+      </label>
+      <label class="modal-field">
+        <span>Prix d'achat (€)</span>
+        <input
+          type="number"
+          id="create-price"
+          step="0.0001"
+          min="0"
+          required
+        />
+      </label>
+      <label class="modal-field">
+        <span>Dividende (€)</span>
+        <input
+          type="number"
+          id="create-dividend"
+          step="0.01"
+          min="0"
+          value="0"
+          required
+        />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" value="cancel" class="modal-btn">Annuler</button>
+        <button type="submit" value="save" class="modal-btn primary">
+          Créer
         </button>
       </div>
     </form>

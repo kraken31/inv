@@ -5,9 +5,15 @@ const state = {
   sortDir: "asc",
   query: "",
   liquidite: null,
+  proprietaire: null,
+  portfolios: [],
 };
 
 const tbody = document.querySelector("#wallet-table tbody");
+const listTbody = document.querySelector("#portefeuilles-table tbody");
+const listView = document.getElementById("list-view");
+const walletView = document.getElementById("wallet-view");
+const walletTitle = document.getElementById("wallet-title");
 const statusEl = document.getElementById("status");
 const searchEl = document.getElementById("search");
 const reloadEl = document.getElementById("reload");
@@ -222,6 +228,98 @@ function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
+function ownerParam(name = state.proprietaire) {
+  return `proprietaire=${encodeURIComponent(name)}`;
+}
+
+function selectedOwner() {
+  return new URLSearchParams(window.location.search).get("proprietaire");
+}
+
+function showListView() {
+  listView.hidden = false;
+  walletView.hidden = true;
+  document.title = "Portefeuille";
+}
+
+function showWalletView(owner) {
+  listView.hidden = true;
+  walletView.hidden = false;
+  state.proprietaire = owner;
+  walletTitle.textContent = owner;
+  document.title = `Portefeuille — ${owner}`;
+}
+
+function renderPortfolios() {
+  listTbody.innerHTML = "";
+  if (!state.portfolios.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      '<td class="empty" colspan="9">Aucun portefeuille</td>';
+    listTbody.appendChild(tr);
+    return;
+  }
+  for (const r of state.portfolios) {
+    const tr = document.createElement("tr");
+    tr.classList.add("clickable");
+    const plusMinus = Number(r.plus_minus_value) || 0;
+    tr.innerHTML = `
+      <td>${escapeHtml(r.proprietaire)}</td>
+      <td class="num">${nfInt.format(r.nb_lignes ?? 0)}</td>
+      <td class="num">${nfEur.format(r.purchase_amount ?? 0)}</td>
+      <td>${escapeHtml(formatCurrentDate(r.current_date))}</td>
+      <td class="num">${nfEur.format(r.current_amount ?? 0)}</td>
+      <td class="num">${nfEur.format(r.dividend ?? 0)}</td>
+      <td class="num">${r.liquidite != null ? nfEur.format(r.liquidite) : ""}</td>
+      <td class="num ${signClass(plusMinus)}">${nfEur.format(plusMinus)}</td>
+      <td class="num ${signClass(r.perf)}">${fmtPct(r.perf)}</td>
+    `;
+    tr.addEventListener("click", () => {
+      window.location.href =
+        `/?${ownerParam(r.proprietaire)}`;
+    });
+    listTbody.appendChild(tr);
+  }
+}
+
+async function loadPortfolios() {
+  setStatus("Chargement…");
+  try {
+    const resp = await fetch("/api/portefeuilles");
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    state.portfolios = await resp.json();
+    setStatus("");
+    renderPortfolios();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+}
+
+function fillStockSelect(selectEl, stocks) {
+  const opts = ['<option value="">— Choisir une action —</option>'];
+  for (const s of stocks) {
+    opts.push(
+      `<option value="${escapeHtml(s.id)}">` +
+        `${escapeHtml(s.name)} (${escapeHtml(s.id)})</option>`,
+    );
+  }
+  selectEl.innerHTML = opts.join("");
+}
+
+async function boot() {
+  const owner = selectedOwner();
+  if (owner) {
+    showWalletView(owner);
+    await loadData();
+  } else {
+    showListView();
+    await loadPortfolios();
+  }
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;",
@@ -235,9 +333,10 @@ function escapeHtml(s) {
 async function loadData() {
   setStatus("Chargement…");
   try {
+    const q = ownerParam();
     const [walletResp, liquiditeResp] = await Promise.all([
-      fetch("/api/wallet"),
-      fetch("/api/liquidite"),
+      fetch(`/api/wallet?${q}`),
+      fetch(`/api/liquidite?${q}`),
     ]);
     if (!walletResp.ok) {
       const err = await walletResp.json().catch(() => ({}));
@@ -302,7 +401,10 @@ liquiditeDialog.addEventListener("close", async () => {
     const resp = await fetch("/api/liquidite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ liquidite: value }),
+      body: JSON.stringify({
+        liquidite: value,
+        proprietaire: state.proprietaire,
+      }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -363,7 +465,7 @@ deleteDialog.addEventListener("close", async () => {
   try {
     setStatus("Suppression…");
     const resp = await fetch(
-      `/api/wallet/${encodeURIComponent(id)}`,
+      `/api/wallet/${encodeURIComponent(id)}?${ownerParam()}`,
       { method: "DELETE" },
     );
     if (!resp.ok) {
@@ -386,6 +488,7 @@ editDialog.addEventListener("close", async () => {
     date: editDate.value,
     price: Number(editPrice.value),
     dividend: Number(editDividend.value),
+    proprietaire: state.proprietaire,
   };
   if (
     !Number.isFinite(body.quantity) ||
@@ -398,11 +501,14 @@ editDialog.addEventListener("close", async () => {
   }
   try {
     setStatus("Mise à jour…");
-    const resp = await fetch(`/api/wallet/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const resp = await fetch(
+      `/api/wallet/${encodeURIComponent(id)}?${ownerParam()}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
@@ -425,20 +531,13 @@ const addDividend = document.getElementById("add-dividend");
 addBtn.addEventListener("click", async () => {
   try {
     setStatus("Chargement des actions disponibles…");
-    const resp = await fetch("/api/stocks/available");
+    const resp = await fetch(`/api/stocks/available?${ownerParam()}`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
     }
     const stocks = await resp.json();
-    const opts = ['<option value="">— Choisir une action —</option>'];
-    for (const s of stocks) {
-      opts.push(
-        `<option value="${escapeHtml(s.id)}">` +
-          `${escapeHtml(s.name)} (${escapeHtml(s.id)})</option>`,
-      );
-    }
-    addId.innerHTML = opts.join("");
+    fillStockSelect(addId, stocks);
     addId.value = "";
     addQuantity.value = "";
     addDate.value = todayIso();
@@ -462,6 +561,7 @@ addDialog.addEventListener("close", async () => {
     date: addDate.value,
     price: Number(addPrice.value),
     dividend: Number(addDividend.value),
+    proprietaire: state.proprietaire,
   };
   if (
     !body.id ||
@@ -492,4 +592,78 @@ addDialog.addEventListener("close", async () => {
   }
 });
 
-loadData();
+const createBtn = document.getElementById("create-portefeuille");
+const createDialog = document.getElementById("create-dialog");
+const createProprietaire = document.getElementById("create-proprietaire");
+const createId = document.getElementById("create-id");
+const createQuantity = document.getElementById("create-quantity");
+const createDate = document.getElementById("create-date");
+const createPrice = document.getElementById("create-price");
+const createDividend = document.getElementById("create-dividend");
+
+createBtn.addEventListener("click", async () => {
+  try {
+    setStatus("Chargement des actions…");
+    const resp = await fetch("/api/stocks");
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const stocks = await resp.json();
+    fillStockSelect(createId, stocks);
+    createProprietaire.value = "";
+    createId.value = "";
+    createQuantity.value = "";
+    createDate.value = todayIso();
+    createPrice.value = "";
+    createDividend.value = "0";
+    setStatus("");
+    if (typeof createDialog.showModal === "function") {
+      createDialog.showModal();
+      createProprietaire.focus();
+    }
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+createDialog.addEventListener("close", async () => {
+  if (createDialog.returnValue !== "save") return;
+  const body = {
+    proprietaire: createProprietaire.value.trim(),
+    id: createId.value,
+    quantity: Number(createQuantity.value),
+    date: createDate.value,
+    price: Number(createPrice.value),
+    dividend: Number(createDividend.value),
+  };
+  if (
+    !body.proprietaire ||
+    !body.id ||
+    !Number.isFinite(body.quantity) ||
+    body.quantity <= 0 ||
+    !Number.isFinite(body.price) ||
+    !Number.isFinite(body.dividend) ||
+    !body.date
+  ) {
+    setStatus("Champs invalides", true);
+    return;
+  }
+  try {
+    setStatus("Création du portefeuille…");
+    const resp = await fetch("/api/portefeuilles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    window.location.href = `/?${ownerParam(body.proprietaire)}`;
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+boot();

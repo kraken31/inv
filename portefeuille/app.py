@@ -2,6 +2,10 @@
 
 API Flask qui lit la table `wallet` (jointure sur `stocks` via la colonne
 `id`) de la base SQLite locale et expose les données au front.
+
+Plusieurs portefeuilles coexistent, distingués par la colonne
+`proprietaire` sur `wallet` / `walletDetails` et `walletETF` /
+`walletETFDetails`.
 """
 
 import math
@@ -37,7 +41,15 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 # /api/securite ci-dessous — penser à les garder synchronisés.
 SECURITE_YEAR_MIN_COVERAGE = 50
 
+# Propriétaire du portefeuille historique (lignes existantes au moment
+# de l'ajout de la colonne `proprietaire`).
+DEFAULT_PROPRIETAIRE = "Aurélien"
+PROPRIETAIRE_MAX_LEN = 80
+
 app = Flask(__name__)
+
+_SCHEMA_READY = False
+_SCHEMA_LOCK = threading.Lock()
 
 
 # Registry des jobs de refresh exposés par /api/refresh/<job>. Pour
@@ -113,6 +125,187 @@ def iso_to_fr_date(date_str: str) -> str:
     Suppose que le format ISO a déjà été validé en amont.
     """
     return f"{date_str[8:10]}/{date_str[5:7]}/{date_str[0:4]}"
+
+
+class ProprietaireError(ValueError):
+    """Nom de propriétaire manquant ou invalide."""
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _ensure_proprietaire_column(conn: sqlite3.Connection, table: str) -> None:
+    if "proprietaire" not in _table_columns(conn, table):
+        conn.execute(
+            f"ALTER TABLE {table} ADD COLUMN proprietaire "
+            f"TEXT NOT NULL DEFAULT '{DEFAULT_PROPRIETAIRE}'"
+        )
+    conn.execute(
+        f"UPDATE {table} SET proprietaire = ? "
+        "WHERE proprietaire IS NULL OR TRIM(proprietaire) = ''",
+        (DEFAULT_PROPRIETAIRE,),
+    )
+
+
+def ensure_schema() -> None:
+    """Ajoute `proprietaire` aux tables de portefeuille si besoin,
+    rattache les lignes existantes à DEFAULT_PROPRIETAIRE, et pose
+    les index d'unicité (un titre par portefeuille, un détail par
+    propriétaire).
+    """
+    global _SCHEMA_READY
+    if _SCHEMA_READY:
+        return
+    with _SCHEMA_LOCK:
+        if _SCHEMA_READY:
+            return
+        with get_db_rw() as conn:
+            for table in (
+                "wallet",
+                "walletDetails",
+                "walletETF",
+                "walletETFDetails",
+            ):
+                _ensure_proprietaire_column(conn, table)
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "wallet_proprietaire_id "
+                "ON wallet (proprietaire COLLATE NOCASE, id)"
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "walletDetails_proprietaire "
+                "ON walletDetails (proprietaire COLLATE NOCASE)"
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "walletETF_proprietaire_id "
+                "ON walletETF (proprietaire COLLATE NOCASE, id)"
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "walletETFDetails_proprietaire "
+                "ON walletETFDetails (proprietaire COLLATE NOCASE)"
+            )
+            conn.commit()
+        _SCHEMA_READY = True
+
+
+@app.before_request
+def _migrate_schema():
+    try:
+        ensure_schema()
+    except FileNotFoundError:
+        pass
+
+
+def normalize_proprietaire(raw) -> str:
+    """Nettoie un nom de propriétaire. Lève ProprietaireError si
+    vide ou trop long.
+    """
+    if raw is None:
+        raise ProprietaireError("Propriétaire requis")
+    name = str(raw).strip()
+    if not name:
+        raise ProprietaireError("Propriétaire requis")
+    if len(name) > PROPRIETAIRE_MAX_LEN:
+        raise ProprietaireError("Nom de propriétaire trop long")
+    return name
+
+
+def proprietaire_from_request(payload: dict | None = None) -> str:
+    raw = None
+    if payload:
+        raw = payload.get("proprietaire")
+    if raw is None:
+        raw = request.args.get("proprietaire")
+    return normalize_proprietaire(raw)
+
+
+def owner_exists(conn: sqlite3.Connection, proprietaire: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM wallet
+        WHERE proprietaire = ? COLLATE NOCASE
+        UNION ALL
+        SELECT 1
+        FROM walletDetails
+        WHERE proprietaire = ? COLLATE NOCASE
+        LIMIT 1
+        """,
+        (proprietaire, proprietaire),
+    ).fetchone()
+    return row is not None
+
+
+def etf_owner_exists(conn: sqlite3.Connection, proprietaire: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM walletETF
+        WHERE proprietaire = ? COLLATE NOCASE
+        UNION ALL
+        SELECT 1
+        FROM walletETFDetails
+        WHERE proprietaire = ? COLLATE NOCASE
+        LIMIT 1
+        """,
+        (proprietaire, proprietaire),
+    ).fetchone()
+    return row is not None
+
+
+def parse_position_payload(payload: dict) -> tuple[str, int, float, float, str]:
+    """Extrait id / quantity / price / dividend / date d'une ligne
+    de portefeuille. Lève ValueError avec un message affichable.
+    """
+    try:
+        stock_id = str(payload["id"]).strip()
+        quantity = int(payload["quantity"])
+        price = float(payload["price"])
+        dividend = float(payload["dividend"])
+        date_str = str(payload["date"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Champs invalides") from exc
+
+    if not stock_id:
+        raise ValueError("Action requise")
+    if quantity <= 0:
+        raise ValueError("Quantité doit être > 0")
+    if price < 0 or dividend < 0:
+        raise ValueError("Valeurs négatives interdites")
+    if not math.isfinite(price) or not math.isfinite(dividend):
+        raise ValueError("Valeurs non finies")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        raise ValueError("Date invalide (YYYY-MM-DD)")
+    return stock_id, quantity, price, dividend, date_str
+
+
+def parse_etf_position_payload(payload: dict) -> tuple[str, float, float, str]:
+    """Extrait id / quantity / price / date d'une ligne ETF.
+    Lève ValueError avec un message affichable.
+    """
+    try:
+        etf_id = str(payload["id"]).strip()
+        quantity = float(payload["quantity"])
+        price = float(payload["price"])
+        date_str = str(payload["date"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Champs invalides") from exc
+
+    if not etf_id:
+        raise ValueError("ETF requis")
+    if quantity <= 0:
+        raise ValueError("Quantité doit être > 0")
+    if price < 0:
+        raise ValueError("Valeurs négatives interdites")
+    if not math.isfinite(quantity) or not math.isfinite(price):
+        raise ValueError("Valeurs non finies")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        raise ValueError("Date invalide (YYYY-MM-DD)")
+    return etf_id, quantity, price, date_str
 
 
 @app.route("/")
@@ -194,8 +387,143 @@ def securite_page():
     )
 
 
+@app.route("/api/portefeuilles")
+def api_portefeuilles():
+    """Liste les portefeuilles (un par propriétaire) avec une
+    synthèse de valorisation.
+    """
+    query = """
+        WITH latest_price AS (
+            SELECT p.id, p.date, p.price
+            FROM pricing p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricing
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        ),
+        owners AS (
+            SELECT proprietaire FROM wallet
+            WHERE proprietaire IS NOT NULL AND TRIM(proprietaire) != ''
+            UNION
+            SELECT proprietaire FROM walletDetails
+            WHERE proprietaire IS NOT NULL AND TRIM(proprietaire) != ''
+        ),
+        agg AS (
+            SELECT
+                w.proprietaire,
+                COUNT(*) AS nb_lignes,
+                SUM(w.quantity * w.price) AS purchase_amount,
+                SUM(COALESCE(w.quantity * lp.price, 0)) AS current_amount,
+                SUM(COALESCE(w.dividend, 0)) AS dividend,
+                MAX(lp.date) AS current_date
+            FROM wallet w
+            LEFT JOIN latest_price lp ON lp.id = w.id
+            GROUP BY w.proprietaire
+        )
+        SELECT
+            o.proprietaire AS proprietaire,
+            COALESCE(a.nb_lignes, 0) AS nb_lignes,
+            COALESCE(a.purchase_amount, 0) AS purchase_amount,
+            COALESCE(a.current_amount, 0) AS current_amount,
+            COALESCE(a.dividend, 0) AS dividend,
+            a.current_date AS current_date,
+            d.liquidite AS liquidite,
+            COALESCE(a.current_amount, 0)
+                - COALESCE(a.purchase_amount, 0) AS plus_minus_value,
+            CASE WHEN COALESCE(a.purchase_amount, 0) > 0
+                 THEN 100.0 * (COALESCE(a.current_amount, 0)
+                               - COALESCE(a.purchase_amount, 0))
+                              / a.purchase_amount
+            END AS perf
+        FROM owners o
+        LEFT JOIN agg a
+            ON a.proprietaire = o.proprietaire COLLATE NOCASE
+        LEFT JOIN walletDetails d
+            ON d.proprietaire = o.proprietaire COLLATE NOCASE
+        ORDER BY o.proprietaire COLLATE NOCASE
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/portefeuilles", methods=["POST"])
+def api_portefeuilles_create():
+    """Crée un portefeuille : une ligne `walletDetails` (liquidité
+    à 0) et une première position dans `wallet`. Refuse si le
+    propriétaire existe déjà (409) ou si l'action est inconnue (404).
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        proprietaire = normalize_proprietaire(payload.get("proprietaire"))
+        stock_id, quantity, price, dividend, date_str = (
+            parse_position_payload(payload)
+        )
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        with get_db_rw() as conn:
+            if owner_exists(conn, proprietaire):
+                return (
+                    jsonify({
+                        "error": "Un portefeuille existe déjà "
+                        "pour ce propriétaire",
+                    }),
+                    409,
+                )
+            if not conn.execute(
+                "SELECT 1 FROM stocks WHERE id = ?", (stock_id,)
+            ).fetchone():
+                return jsonify({"error": "Action inconnue"}), 404
+            conn.execute(
+                "INSERT INTO walletDetails (liquidite, proprietaire) "
+                "VALUES (?, ?)",
+                (0, proprietaire),
+            )
+            conn.execute(
+                "INSERT INTO wallet "
+                "(id, quantity, date, price, dividend, proprietaire) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    stock_id,
+                    quantity,
+                    iso_to_fr_date(date_str),
+                    price,
+                    dividend,
+                    proprietaire,
+                ),
+            )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.IntegrityError:
+        return (
+            jsonify({
+                "error": "Un portefeuille existe déjà pour ce propriétaire",
+            }),
+            409,
+        )
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"created": proprietaire}), 201
+
+
 @app.route("/api/wallet")
 def api_wallet():
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     query = """
         WITH latest_price AS (
             SELECT p.id, p.date, p.price, p.per, p.rsi
@@ -232,11 +560,12 @@ def api_wallet():
         FROM wallet w
         LEFT JOIN stocks s       ON s.id = w.id
         LEFT JOIN latest_price lp ON lp.id = w.id
+        WHERE w.proprietaire = ? COLLATE NOCASE
         ORDER BY name COLLATE NOCASE
     """
     try:
         with get_db() as conn:
-            rows = [dict(r) for r in conn.execute(query)]
+            rows = [dict(r) for r in conn.execute(query, (proprietaire,))]
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
     except sqlite3.Error as exc:
@@ -245,10 +574,10 @@ def api_wallet():
     return jsonify(rows)
 
 
-@app.route("/api/stocks/available")
-def api_stocks_available():
-    """Liste les actions de `stocks` qui ne sont pas encore dans
-    `wallet`. Sert à peupler le `<select>` de la modale d'ajout.
+@app.route("/api/stocks")
+def api_stocks():
+    """Liste toutes les actions du référentiel. Sert à peupler le
+    `<select>` de la modale de création d'un portefeuille.
     """
     try:
         with get_db() as conn:
@@ -258,9 +587,6 @@ def api_stocks_available():
                     """
                     SELECT s.id, COALESCE(s.name, s.id) AS name
                     FROM stocks s
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM wallet w WHERE w.id = s.id
-                    )
                     ORDER BY name COLLATE NOCASE
                     """
                 )
@@ -272,60 +598,97 @@ def api_stocks_available():
     return jsonify(rows)
 
 
+@app.route("/api/stocks/available")
+def api_stocks_available():
+    """Liste les actions de `stocks` qui ne sont pas encore dans
+    le portefeuille du propriétaire demandé. Sert à peupler le
+    `<select>` de la modale d'ajout.
+    """
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT s.id, COALESCE(s.name, s.id) AS name
+                    FROM stocks s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM wallet w
+                        WHERE w.id = s.id
+                          AND w.proprietaire = ? COLLATE NOCASE
+                    )
+                    ORDER BY name COLLATE NOCASE
+                    """,
+                    (proprietaire,),
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
 @app.route("/api/wallet", methods=["POST"])
 def api_wallet_create():
-    """Ajoute une ligne dans `wallet`. Refuse si l'id n'existe pas
-    dans `stocks` (404) ou si une ligne pour cet id est déjà
-    présente dans `wallet` (409).
+    """Ajoute une ligne dans `wallet`. Refuse si le portefeuille
+    n'existe pas (404), si l'id n'existe pas dans `stocks` (404)
+    ou si une ligne pour cet id est déjà présente chez ce
+    propriétaire (409).
     """
     payload = request.get_json(silent=True) or {}
     try:
-        stock_id = str(payload["id"]).strip()
-        quantity = int(payload["quantity"])
-        price = float(payload["price"])
-        dividend = float(payload["dividend"])
-        date_str = str(payload["date"])
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"error": "Champs invalides"}), 400
-
-    if not stock_id:
-        return jsonify({"error": "Action requise"}), 400
-    if quantity <= 0:
-        return jsonify({"error": "Quantité doit être > 0"}), 400
-    if price < 0 or dividend < 0:
-        return jsonify({"error": "Valeurs négatives interdites"}), 400
-    if not math.isfinite(price) or not math.isfinite(dividend):
-        return jsonify({"error": "Valeurs non finies"}), 400
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
-        return jsonify({"error": "Date invalide (YYYY-MM-DD)"}), 400
+        proprietaire = proprietaire_from_request(payload)
+        stock_id, quantity, price, dividend, date_str = (
+            parse_position_payload(payload)
+        )
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     try:
         with get_db_rw() as conn:
+            if not owner_exists(conn, proprietaire):
+                return jsonify({"error": "Portefeuille introuvable"}), 404
             if not conn.execute(
                 "SELECT 1 FROM stocks WHERE id = ?", (stock_id,)
             ).fetchone():
                 return jsonify({"error": "Action inconnue"}), 404
             if conn.execute(
-                "SELECT 1 FROM wallet WHERE id = ?", (stock_id,)
+                "SELECT 1 FROM wallet "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
+                (stock_id, proprietaire),
             ).fetchone():
                 return (
                     jsonify({"error": "Action déjà dans le portefeuille"}),
                     409,
                 )
             conn.execute(
-                "INSERT INTO wallet (id, quantity, date, price, dividend) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO wallet "
+                "(id, quantity, date, price, dividend, proprietaire) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     stock_id,
                     quantity,
                     iso_to_fr_date(date_str),
                     price,
                     dividend,
+                    proprietaire,
                 ),
             )
             conn.commit()
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
+    except sqlite3.IntegrityError:
+        return (
+            jsonify({"error": "Action déjà dans le portefeuille"}),
+            409,
+        )
     except sqlite3.Error as exc:
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
     return jsonify({"created": stock_id}), 201
@@ -334,12 +697,19 @@ def api_wallet_create():
 @app.route("/api/wallet/<stock_id>", methods=["DELETE"])
 def api_wallet_delete(stock_id: str):
     """Supprime une ligne de la table `wallet` identifiée par son
-    `id` (ISIN). Renvoie 404 si aucune ligne ne correspond.
+    `id` (mnémo) et son propriétaire. Renvoie 404 si aucune ligne
+    ne correspond.
     """
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
     try:
         with get_db_rw() as conn:
             cur = conn.execute(
-                "DELETE FROM wallet WHERE id = ?", (stock_id,)
+                "DELETE FROM wallet "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
+                (stock_id, proprietaire),
             )
             if cur.rowcount == 0:
                 return jsonify({"error": "Action introuvable"}), 404
@@ -354,14 +724,18 @@ def api_wallet_delete(stock_id: str):
 @app.route("/api/wallet/<stock_id>", methods=["PUT"])
 def api_wallet_update(stock_id: str):
     """Met à jour quantity / date / price / dividend pour la ligne
-    `wallet` d'id donné. Tous les champs sont requis.
+    `wallet` d'id et de propriétaire donnés. Tous les champs sont
+    requis.
     """
     payload = request.get_json(silent=True) or {}
     try:
+        proprietaire = proprietaire_from_request(payload)
         quantity = int(payload["quantity"])
         price = float(payload["price"])
         dividend = float(payload["dividend"])
         date_str = str(payload["date"])
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "Champs invalides"}), 400
 
@@ -376,13 +750,15 @@ def api_wallet_update(stock_id: str):
         with get_db_rw() as conn:
             cur = conn.execute(
                 "UPDATE wallet SET quantity = ?, date = ?, "
-                "price = ?, dividend = ? WHERE id = ?",
+                "price = ?, dividend = ? "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
                 (
                     quantity,
                     iso_to_fr_date(date_str),
                     price,
                     dividend,
                     stock_id,
+                    proprietaire,
                 ),
             )
             if cur.rowcount == 0:
@@ -395,8 +771,140 @@ def api_wallet_update(stock_id: str):
     return jsonify({"updated": stock_id})
 
 
+@app.route("/api/portefeuilles-etf")
+def api_portefeuilles_etf():
+    """Liste les portefeuilles ETF (un par propriétaire) avec une
+    synthèse de valorisation.
+    """
+    query = """
+        WITH latest_price AS (
+            SELECT p.id, p.date, p.price
+            FROM pricingETF p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingETF
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        ),
+        owners AS (
+            SELECT proprietaire FROM walletETF
+            WHERE proprietaire IS NOT NULL AND TRIM(proprietaire) != ''
+            UNION
+            SELECT proprietaire FROM walletETFDetails
+            WHERE proprietaire IS NOT NULL AND TRIM(proprietaire) != ''
+        ),
+        agg AS (
+            SELECT
+                w.proprietaire,
+                COUNT(*) AS nb_lignes,
+                SUM(w.quantity * w.price) AS purchase_amount,
+                SUM(COALESCE(w.quantity * lp.price, 0)) AS current_amount,
+                MAX(lp.date) AS current_date
+            FROM walletETF w
+            LEFT JOIN latest_price lp ON lp.id = w.id
+            GROUP BY w.proprietaire
+        )
+        SELECT
+            o.proprietaire AS proprietaire,
+            COALESCE(a.nb_lignes, 0) AS nb_lignes,
+            COALESCE(a.purchase_amount, 0) AS purchase_amount,
+            COALESCE(a.current_amount, 0) AS current_amount,
+            a.current_date AS current_date,
+            d.liquidite AS liquidite,
+            COALESCE(a.current_amount, 0)
+                - COALESCE(a.purchase_amount, 0) AS plus_minus_value,
+            CASE WHEN COALESCE(a.purchase_amount, 0) > 0
+                 THEN 100.0 * (COALESCE(a.current_amount, 0)
+                               - COALESCE(a.purchase_amount, 0))
+                              / a.purchase_amount
+            END AS perf
+        FROM owners o
+        LEFT JOIN agg a
+            ON a.proprietaire = o.proprietaire COLLATE NOCASE
+        LEFT JOIN walletETFDetails d
+            ON d.proprietaire = o.proprietaire COLLATE NOCASE
+        ORDER BY o.proprietaire COLLATE NOCASE
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/portefeuilles-etf", methods=["POST"])
+def api_portefeuilles_etf_create():
+    """Crée un portefeuille ETF : une ligne `walletETFDetails`
+    (liquidité à 0) et une première position dans `walletETF`.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        proprietaire = normalize_proprietaire(payload.get("proprietaire"))
+        etf_id, quantity, price, date_str = parse_etf_position_payload(
+            payload
+        )
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        with get_db_rw() as conn:
+            if etf_owner_exists(conn, proprietaire):
+                return (
+                    jsonify({
+                        "error": "Un portefeuille ETF existe déjà "
+                        "pour ce propriétaire",
+                    }),
+                    409,
+                )
+            if not conn.execute(
+                "SELECT 1 FROM etf WHERE id = ?", (etf_id,)
+            ).fetchone():
+                return jsonify({"error": "ETF inconnu"}), 404
+            conn.execute(
+                "INSERT INTO walletETFDetails (liquidite, proprietaire) "
+                "VALUES (?, ?)",
+                (0, proprietaire),
+            )
+            conn.execute(
+                "INSERT INTO walletETF "
+                "(id, quantity, date, price, proprietaire) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    etf_id,
+                    quantity,
+                    iso_to_fr_date(date_str),
+                    price,
+                    proprietaire,
+                ),
+            )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.IntegrityError:
+        return (
+            jsonify({
+                "error": "Un portefeuille ETF existe déjà "
+                "pour ce propriétaire",
+            }),
+            409,
+        )
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"created": proprietaire}), 201
+
+
 @app.route("/api/wallet-etf")
 def api_wallet_etf():
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     query = """
         WITH latest_price AS (
             SELECT p.id, p.date, p.price
@@ -427,11 +935,12 @@ def api_wallet_etf():
         FROM walletETF w
         LEFT JOIN etf e            ON e.id = w.id
         LEFT JOIN latest_price lp  ON lp.id = w.id
+        WHERE w.proprietaire = ? COLLATE NOCASE
         ORDER BY name COLLATE NOCASE
     """
     try:
         with get_db() as conn:
-            rows = [dict(r) for r in conn.execute(query)]
+            rows = [dict(r) for r in conn.execute(query, (proprietaire,))]
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
     except sqlite3.Error as exc:
@@ -440,10 +949,10 @@ def api_wallet_etf():
     return jsonify(rows)
 
 
-@app.route("/api/etfs/available")
-def api_etfs_available():
-    """Liste les ETF de `etf` qui ne sont pas encore dans
-    `walletETF`. Sert à peupler le `<select>` de la modale d'ajout.
+@app.route("/api/etfs")
+def api_etfs():
+    """Liste tous les ETF du référentiel. Sert à peupler le
+    `<select>` de la modale de création d'un portefeuille ETF.
     """
     try:
         with get_db() as conn:
@@ -453,9 +962,6 @@ def api_etfs_available():
                     """
                     SELECT e.id, COALESCE(e.name, e.id) AS name
                     FROM etf e
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM walletETF w WHERE w.id = e.id
-                    )
                     ORDER BY name COLLATE NOCASE
                     """
                 )
@@ -467,58 +973,95 @@ def api_etfs_available():
     return jsonify(rows)
 
 
+@app.route("/api/etfs/available")
+def api_etfs_available():
+    """Liste les ETF de `etf` qui ne sont pas encore dans le
+    portefeuille ETF du propriétaire demandé.
+    """
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT e.id, COALESCE(e.name, e.id) AS name
+                    FROM etf e
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM walletETF w
+                        WHERE w.id = e.id
+                          AND w.proprietaire = ? COLLATE NOCASE
+                    )
+                    ORDER BY name COLLATE NOCASE
+                    """,
+                    (proprietaire,),
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
 @app.route("/api/wallet-etf", methods=["POST"])
 def api_wallet_etf_create():
-    """Ajoute une ligne dans `walletETF`. Refuse si l'id n'existe pas
-    dans `etf` (404) ou si une ligne pour cet id est déjà présente
+    """Ajoute une ligne dans `walletETF`. Refuse si le portefeuille
+    n'existe pas (404), si l'id n'existe pas dans `etf` (404) ou si
+    une ligne pour cet id est déjà présente chez ce propriétaire
     (409).
     """
     payload = request.get_json(silent=True) or {}
     try:
-        etf_id = str(payload["id"]).strip()
-        quantity = float(payload["quantity"])
-        price = float(payload["price"])
-        date_str = str(payload["date"])
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"error": "Champs invalides"}), 400
-
-    if not etf_id:
-        return jsonify({"error": "ETF requis"}), 400
-    if quantity <= 0:
-        return jsonify({"error": "Quantité doit être > 0"}), 400
-    if price < 0:
-        return jsonify({"error": "Valeurs négatives interdites"}), 400
-    if not math.isfinite(quantity) or not math.isfinite(price):
-        return jsonify({"error": "Valeurs non finies"}), 400
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
-        return jsonify({"error": "Date invalide (YYYY-MM-DD)"}), 400
+        proprietaire = proprietaire_from_request(payload)
+        etf_id, quantity, price, date_str = parse_etf_position_payload(
+            payload
+        )
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     try:
         with get_db_rw() as conn:
+            if not etf_owner_exists(conn, proprietaire):
+                return jsonify({"error": "Portefeuille introuvable"}), 404
             if not conn.execute(
                 "SELECT 1 FROM etf WHERE id = ?", (etf_id,)
             ).fetchone():
                 return jsonify({"error": "ETF inconnu"}), 404
             if conn.execute(
-                "SELECT 1 FROM walletETF WHERE id = ?", (etf_id,)
+                "SELECT 1 FROM walletETF "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
+                (etf_id, proprietaire),
             ).fetchone():
                 return (
                     jsonify({"error": "ETF déjà dans le portefeuille"}),
                     409,
                 )
             conn.execute(
-                "INSERT INTO walletETF (id, quantity, date, price) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO walletETF "
+                "(id, quantity, date, price, proprietaire) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (
                     etf_id,
                     quantity,
                     iso_to_fr_date(date_str),
                     price,
+                    proprietaire,
                 ),
             )
             conn.commit()
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
+    except sqlite3.IntegrityError:
+        return (
+            jsonify({"error": "ETF déjà dans le portefeuille"}),
+            409,
+        )
     except sqlite3.Error as exc:
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
     return jsonify({"created": etf_id}), 201
@@ -526,13 +1069,19 @@ def api_wallet_etf_create():
 
 @app.route("/api/wallet-etf/<etf_id>", methods=["DELETE"])
 def api_wallet_etf_delete(etf_id: str):
-    """Supprime une ligne de `walletETF`. Renvoie 404 si aucune ligne
-    ne correspond.
+    """Supprime une ligne de `walletETF` identifiée par son id et
+    son propriétaire. Renvoie 404 si aucune ligne ne correspond.
     """
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
     try:
         with get_db_rw() as conn:
             cur = conn.execute(
-                "DELETE FROM walletETF WHERE id = ?", (etf_id,)
+                "DELETE FROM walletETF "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
+                (etf_id, proprietaire),
             )
             if cur.rowcount == 0:
                 return jsonify({"error": "ETF introuvable"}), 404
@@ -547,13 +1096,16 @@ def api_wallet_etf_delete(etf_id: str):
 @app.route("/api/wallet-etf/<etf_id>", methods=["PUT"])
 def api_wallet_etf_update(etf_id: str):
     """Met à jour quantity / date / price pour la ligne `walletETF`
-    d'id donné. Tous les champs sont requis.
+    d'id et de propriétaire donnés. Tous les champs sont requis.
     """
     payload = request.get_json(silent=True) or {}
     try:
+        proprietaire = proprietaire_from_request(payload)
         quantity = float(payload["quantity"])
         price = float(payload["price"])
         date_str = str(payload["date"])
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "Champs invalides"}), 400
 
@@ -568,12 +1120,14 @@ def api_wallet_etf_update(etf_id: str):
         with get_db_rw() as conn:
             cur = conn.execute(
                 "UPDATE walletETF SET quantity = ?, date = ?, "
-                "price = ? WHERE id = ?",
+                "price = ? "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
                 (
                     quantity,
                     iso_to_fr_date(date_str),
                     price,
                     etf_id,
+                    proprietaire,
                 ),
             )
             if cur.rowcount == 0:
@@ -1131,9 +1685,15 @@ def api_etf_detail(etf_id: str):
 @app.route("/api/liquidite", methods=["GET"])
 def api_liquidite():
     try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
         with get_db() as conn:
             row = conn.execute(
-                "SELECT liquidite FROM walletDetails LIMIT 1"
+                "SELECT liquidite FROM walletDetails "
+                "WHERE proprietaire = ? COLLATE NOCASE",
+                (proprietaire,),
             ).fetchone()
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
@@ -1145,11 +1705,14 @@ def api_liquidite():
 
 @app.route("/api/liquidite", methods=["POST"])
 def api_liquidite_update():
-    """Met à jour (ou insère) la valeur de liquidité dans
-    `walletDetails`. La table est mono-ligne : on tente un UPDATE et,
-    si aucune ligne n'existe encore, on bascule sur INSERT.
+    """Met à jour (ou insère) la liquidité du portefeuille du
+    propriétaire donné dans `walletDetails`.
     """
     payload = request.get_json(silent=True) or {}
+    try:
+        proprietaire = proprietaire_from_request(payload)
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
     raw = payload.get("liquidite")
     try:
         value = float(raw)
@@ -1160,13 +1723,18 @@ def api_liquidite_update():
 
     try:
         with get_db_rw() as conn:
+            if not owner_exists(conn, proprietaire):
+                return jsonify({"error": "Portefeuille introuvable"}), 404
             cur = conn.execute(
-                "UPDATE walletDetails SET liquidite = ?", (value,)
+                "UPDATE walletDetails SET liquidite = ? "
+                "WHERE proprietaire = ? COLLATE NOCASE",
+                (value, proprietaire),
             )
             if cur.rowcount == 0:
                 conn.execute(
-                    "INSERT INTO walletDetails (liquidite) VALUES (?)",
-                    (value,),
+                    "INSERT INTO walletDetails (liquidite, proprietaire) "
+                    "VALUES (?, ?)",
+                    (value, proprietaire),
                 )
             conn.commit()
     except FileNotFoundError as exc:
@@ -1180,9 +1748,15 @@ def api_liquidite_update():
 @app.route("/api/liquidite-etf", methods=["GET"])
 def api_liquidite_etf():
     try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
         with get_db() as conn:
             row = conn.execute(
-                "SELECT liquidite FROM walletETFDetails LIMIT 1"
+                "SELECT liquidite FROM walletETFDetails "
+                "WHERE proprietaire = ? COLLATE NOCASE",
+                (proprietaire,),
             ).fetchone()
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
@@ -1194,10 +1768,14 @@ def api_liquidite_etf():
 
 @app.route("/api/liquidite-etf", methods=["POST"])
 def api_liquidite_etf_update():
-    """Met à jour (ou insère) la liquidité dans `walletETFDetails`.
-    Table mono-ligne : UPDATE, sinon INSERT.
+    """Met à jour (ou insère) la liquidité du portefeuille ETF du
+    propriétaire donné dans `walletETFDetails`.
     """
     payload = request.get_json(silent=True) or {}
+    try:
+        proprietaire = proprietaire_from_request(payload)
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
     raw = payload.get("liquidite")
     try:
         value = float(raw)
@@ -1208,13 +1786,18 @@ def api_liquidite_etf_update():
 
     try:
         with get_db_rw() as conn:
+            if not etf_owner_exists(conn, proprietaire):
+                return jsonify({"error": "Portefeuille introuvable"}), 404
             cur = conn.execute(
-                "UPDATE walletETFDetails SET liquidite = ?", (value,)
+                "UPDATE walletETFDetails SET liquidite = ? "
+                "WHERE proprietaire = ? COLLATE NOCASE",
+                (value, proprietaire),
             )
             if cur.rowcount == 0:
                 conn.execute(
-                    "INSERT INTO walletETFDetails (liquidite) VALUES (?)",
-                    (value,),
+                    "INSERT INTO walletETFDetails "
+                    "(liquidite, proprietaire) VALUES (?, ?)",
+                    (value, proprietaire),
                 )
             conn.commit()
     except FileNotFoundError as exc:
