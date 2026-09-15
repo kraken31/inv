@@ -122,11 +122,11 @@ Sur l’écran Croissance, l’année **n** n’est pas l’année calendaire : 
 Navigation latérale commune, en deux menus :
 
 - **Actions** : Portefeuille, Action, PER, RSI, Rendement, Croissance ;
-- **ETF** : Portefeuille ETF, ETF.
+- **ETF** : Portefeuille ETF, ETF, RSI.
 
 Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats**, **↻ Cours ETF** (voir § 6).
 
-Recherche (sauf fiches Action et ETF) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…`).
+Recherche (sauf fiches Action et ETF) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…` ou `/etf?id=…`).
 
 ### 4.1 Portefeuille (`/`)
 
@@ -216,7 +216,20 @@ Fiche d’un ETF du référentiel Paris (table `etf`).
 - URL bookmarkable : `/etf?id=B28A`, `/etf?category=Obligations&id=B28A` ou `/etf?pea=1&category=Actions` ;
 - affichage du **nom**, du **ticker**, du **dernier cours** connu (`pricingETF`, avec la date), du **TER**, de la **catégorie** justETF et de l’**éligibilité PEA** justETF lorsqu’ils sont disponibles (sinon « — » ; TER : repli Yahoo si justETF n’a pas la fiche).
 
-### 4.8 Portefeuille ETF (`/portefeuille-etf`)
+### 4.8 RSI ETF (`/rsi-etf`)
+
+Screener « survendu » du référentiel ETF Paris, calqué sur `/rsi`.
+
+ETF retenus :
+
+- RSI **< 30** ;
+- même fenêtre de fraîcheur de **7 jours**.
+
+**Filtres** combinables, comme `/etf` : classe d’actifs et PEA (URL bookmarkable, ex. `/rsi-etf?pea=1&category=Actions`). Recherche locale sur nom / ticker.
+
+Colonnes : nom (lien vers `/etf?id=…`), TER, RSI. Tri par défaut : RSI croissant. Export CSV.
+
+### 4.9 Portefeuille ETF (`/portefeuille-etf`)
 
 Même écran que le portefeuille actions, appliqué aux positions `walletETF` :
 

@@ -352,6 +352,11 @@ def rsi_page():
     return render_template("rsi.html")
 
 
+@app.route("/rsi-etf")
+def rsi_etf_page():
+    return render_template("rsi_etf.html")
+
+
 @app.route("/rendement")
 def rendement_page():
     current_year = date.today().year
@@ -1248,6 +1253,62 @@ def api_rsi():
     except sqlite3.Error as exc:
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
 
+    return jsonify(rows)
+
+
+@app.route("/api/rsi-etf")
+def api_rsi_etf():
+    """ETF dont le dernier RSI connu est < 30, dans la même fenêtre
+    de fraîcheur de 7 jours que `/api/rsi`. Filtres optionnels
+    `category` et `pea` (1 / 0), comme `/api/etf/list`.
+    """
+    category = (request.args.get("category") or "").strip()
+    pea = parse_pea_filter(request.args.get("pea"))
+    query = """
+        WITH latest_pricing AS (
+            SELECT p.id, p.date, p.rsi
+            FROM pricingETF p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingETF
+                WHERE rsi IS NOT NULL
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        ),
+        overall AS (
+            SELECT MAX(date) AS max_date FROM latest_pricing
+        )
+        SELECT
+            COALESCE(e.name, lp.id)   AS name,
+            lp.id                     AS id,
+            lp.date                   AS date,
+            e.ter                     AS ter,
+            e.category                AS category,
+            e.pea                     AS pea,
+            lp.rsi                    AS rsi
+        FROM latest_pricing lp
+        CROSS JOIN overall o
+        LEFT JOIN etf e ON e.id = lp.id
+        WHERE lp.rsi < 30
+          AND lp.date >= date(o.max_date, '-7 days')
+    """
+    params = []
+    if category:
+        query += " AND e.category = ?"
+        params.append(category)
+    if pea is not None:
+        query += " AND e.pea = ?"
+        params.append(pea)
+    query += " ORDER BY lp.rsi ASC"
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query, params)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    for row in rows:
+        row["pea"] = json_pea(row.get("pea"))
     return jsonify(rows)
 
 
