@@ -240,6 +240,10 @@ main {
   min-width: 200px;
 }
 
+.toolbar select#etf-pea-filter {
+  min-width: 160px;
+}
+
 .toolbar select:focus { border-color: var(--accent); }
 
 .view-nav {
@@ -471,6 +475,10 @@ table.summary-table th {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.action-detail[hidden] {
+  display: none;
 }
 
 .action-header h2 {

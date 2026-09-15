@@ -8,20 +8,25 @@ Sources :
   Le libellé Yahoo est plus explicite que celui d'Euronext
   (ex. "iBds D28 Term E Ac" ->
   "iShares iBonds Dec 2028 Term € Corp UCITS ETF EUR (Acc)").
-- justETF : TER et **catégorie** (classe d'actifs : Actions, Obligations,
-  etc.) via la fiche `etf-profile.html?isin=...`. Plus fiable que Yahoo
-  `netExpenseRatio` pour les UCITS européens. Yahoo reste un repli pour
-  le TER si justETF n'a pas la fiche.
+- justETF : TER, **catégorie** (classe d'actifs : Actions, Obligations,
+  etc.) et **éligibilité PEA** via la fiche FR
+  `etf-profile.html?isin=...`. Plus fiable que Yahoo `netExpenseRatio`
+  pour les UCITS européens. Yahoo reste un repli pour le TER si justETF
+  n'a pas la fiche.
 
 Le ticker Yahoo est `<symbole>.PA` (ex. "B28A" -> "B28A.PA").
 
 Table cible :
-    CREATE TABLE etf (id TEXT, name TEXT, isin TEXT, ter REAL, category TEXT)
+    CREATE TABLE etf (
+        id TEXT, name TEXT, isin TEXT, ter REAL, category TEXT, pea INTEGER
+    )
 - id       : symbole Euronext (ex. "B28A", "CW8", "ESE")
 - name     : `longName` Yahoo, à défaut `shortName`, à défaut le nom Euronext
 - isin     : code ISIN Euronext (ex. "IE0008UEVOE0")
 - ter      : TER en pourcentage (ex. 0.12 = 0,12 %), ou NULL si inconnu
 - category : classe d'actifs justETF (ex. "Obligations"), ou NULL
+- pea      : 1 si éligible PEA (badge justETF FR), 0 sinon, NULL si
+             pas de fiche justETF
 
 Le script est idempotent et reprenable : chaque ETF est mis à jour
 indépendamment (DELETE puis INSERT sur son id). Les lignes absentes du
@@ -50,7 +55,7 @@ EURONEXT_URL = (
     "?mics=XPAR"
 )
 JUSTETF_PROFILE_URL = (
-    "https://www.justetf.com/en/etf-profile.html?isin={isin}"
+    "https://www.justetf.com/fr/etf-profile.html?isin={isin}"
 )
 MAX_WORKERS = 3
 RATE_LIMIT_BACKOFF = (5, 15, 45)
@@ -59,11 +64,28 @@ HTTP_HEADERS = {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
 }
 
-# justETF répète souvent cette phrase en anglais sur la fiche.
+# Badge « Éligible au PEA » : présent uniquement sur la fiche FR.
+_PEA_LABEL = re.compile(
+    r'data-testid="etf-profile-controls_pea-label"',
+    re.I,
+)
+
+# justETF : d'abord les data-testid stables, puis les phrases FR/EN.
 _TER_PATTERNS = (
+    re.compile(
+        r'data-testid="(?:etf-profile-header_ter-value|'
+        r'tl_etf-basics_value_ter)"\s*>\s*'
+        r"([0-9]+(?:[.,][0-9]+)?)\s*%",
+        re.I,
+    ),
+    re.compile(
+        r"s['’]élève à\s*"
+        r"([0-9]+(?:[.,][0-9]+)?)\s*%",
+        re.I,
+    ),
     re.compile(
         r"The ETF's TER \(total expense ratio\) amounts to\s*"
         r"([0-9]+(?:[.,][0-9]+)?)\s*%",
@@ -90,21 +112,36 @@ _FOCUS_PATTERNS = (
         r"Investment focus</t[dh]>\s*<td[^>]*>\s*(?:<[^>]+>)*\s*([^<]+)",
         re.I,
     ),
+    re.compile(
+        r"Univers d['’]investissement</t[dh]>\s*<td[^>]*>\s*"
+        r"(?:<[^>]+>)*\s*([^<]+)",
+        re.I,
+    ),
 )
 
 # Première composante de « Investment focus » → libellé FR.
 ASSET_CLASS_LABELS = {
     "equity": "Actions",
+    "actions": "Actions",
     "bonds": "Obligations",
     "bond": "Obligations",
+    "obligations": "Obligations",
     "precious metals": "Métaux précieux",
+    "métaux précieux": "Métaux précieux",
+    "metaux precieux": "Métaux précieux",
     "commodities": "Matières premières",
     "commodity": "Matières premières",
+    "matières premières": "Matières premières",
+    "matieres premieres": "Matières premières",
     "money market": "Marché monétaire",
+    "marché monétaire": "Marché monétaire",
+    "marche monetaire": "Marché monétaire",
     "cryptocurrencies": "Cryptomonnaies",
     "cryptocurrency": "Cryptomonnaies",
     "crypto": "Cryptomonnaies",
+    "cryptomonnaies": "Cryptomonnaies",
     "real estate": "Immobilier",
+    "immobilier": "Immobilier",
 }
 
 _db_lock = threading.Lock()
@@ -225,10 +262,20 @@ def parse_justetf_category(html: str) -> str | None:
     return ASSET_CLASS_LABELS.get(first.lower(), first)
 
 
+def parse_justetf_pea(html: str) -> bool:
+    """True si la fiche FR affiche le badge PEA justETF."""
+    if not html:
+        return False
+    return _PEA_LABEL.search(html) is not None
+
+
 def fetch_justetf_profile(
     isin: str,
-) -> tuple[float | None, str | None]:
-    """Retourne (ter, category) justETF, ou (None, None) si absent."""
+) -> tuple[float | None, str | None, int | None]:
+    """Retourne (ter, category, pea) justETF.
+
+    `pea` vaut 1 ou 0 si la fiche existe, None si absente (404).
+    """
     url = JUSTETF_PROFILE_URL.format(isin=isin)
     last_exc: Exception | None = None
     attempts = len(RATE_LIMIT_BACKOFF) + 1
@@ -237,10 +284,14 @@ def fetch_justetf_profile(
             req = urllib.request.Request(url, headers=HTTP_HEADERS)
             with urllib.request.urlopen(req, timeout=30) as response:
                 html = response.read().decode("utf-8", errors="replace")
-            return parse_justetf_ter(html), parse_justetf_category(html)
+            return (
+                parse_justetf_ter(html),
+                parse_justetf_category(html),
+                1 if parse_justetf_pea(html) else 0,
+            )
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
-                return None, None
+                return None, None, None
             last_exc = exc
             if exc.code in (403, 429, 503) and attempt < len(RATE_LIMIT_BACKOFF):
                 time.sleep(RATE_LIMIT_BACKOFF[attempt])
@@ -254,13 +305,13 @@ def fetch_justetf_profile(
             raise
     if last_exc is not None:
         raise last_exc
-    return None, None
+    return None, None, None
 
 
 def ensure_schema(db: sqlite3.Connection) -> None:
     db.execute(
         "CREATE TABLE IF NOT EXISTS etf "
-        "(id TEXT, name TEXT, isin TEXT, ter REAL, category TEXT)"
+        "(id TEXT, name TEXT, isin TEXT, ter REAL, category TEXT, pea INTEGER)"
     )
     cols = {row[1] for row in db.execute("PRAGMA table_info(etf)")}
     if "ter" not in cols:
@@ -269,6 +320,8 @@ def ensure_schema(db: sqlite3.Connection) -> None:
         db.execute("ALTER TABLE etf ADD COLUMN isin TEXT")
     if "category" not in cols:
         db.execute("ALTER TABLE etf ADD COLUMN category TEXT")
+    if "pea" not in cols:
+        db.execute("ALTER TABLE etf ADD COLUMN pea INTEGER")
     db.commit()
 
 
@@ -279,13 +332,14 @@ def upsert_etf(
     isin: str,
     ter: float | None,
     category: str | None,
+    pea: int | None,
 ) -> None:
     with _db_lock:
         db.execute("DELETE FROM etf WHERE id = ?", (symbol,))
         db.execute(
-            "INSERT INTO etf (id, name, isin, ter, category) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (symbol, name, isin, ter, category),
+            "INSERT INTO etf (id, name, isin, ter, category, pea) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (symbol, name, isin, ter, category, pea),
         )
         db.commit()
 
@@ -301,10 +355,11 @@ def process_etf(symbol: str, fallback_name: str, isin: str):
 
     justetf_ter: float | None = None
     category: str | None = None
+    pea: int | None = None
     try:
-        justetf_ter, category = fetch_justetf_profile(isin)
+        justetf_ter, category, pea = fetch_justetf_profile(isin)
     except Exception:
-        justetf_ter, category = None, None
+        justetf_ter, category, pea = None, None, None
 
     if justetf_ter is not None:
         ter, ter_source = justetf_ter, "justetf"
@@ -319,6 +374,7 @@ def process_etf(symbol: str, fallback_name: str, isin: str):
         isin,
         ter,
         category,
+        pea,
         yahoo_name is not None,
         ter_source,
         err,
@@ -327,21 +383,25 @@ def process_etf(symbol: str, fallback_name: str, isin: str):
 
 def process_justetf_row(etf_id: str, isin: str):
     try:
-        ter, category = fetch_justetf_profile(isin)
+        ter, category, pea = fetch_justetf_profile(isin)
     except Exception as exc:
-        return etf_id, isin, None, None, f"{type(exc).__name__}: {exc}"
-    return etf_id, isin, ter, category, None
+        return etf_id, isin, None, None, None, f"{type(exc).__name__}: {exc}"
+    return etf_id, isin, ter, category, pea, None
 
 
 def refresh_justetf_fields(db: sqlite3.Connection) -> None:
-    """Met à jour TER et catégorie justETF sans retélécharger les noms Yahoo."""
+    """Met à jour TER, catégorie et PEA justETF sans retélécharger
+    les noms Yahoo.
+    """
     rows = db.execute(
         "SELECT id, isin FROM etf "
         "WHERE isin IS NOT NULL AND TRIM(isin) != ''"
     ).fetchall()
-    print(f"{len(rows)} ETF à enrichir (TER + catégorie justETF)")
+    print(f"{len(rows)} ETF à enrichir (TER + catégorie + PEA justETF)")
     with_ter = 0
     with_cat = 0
+    with_pea = 0
+    pea_yes = 0
     errors = 0
     start = time.time()
 
@@ -351,7 +411,7 @@ def refresh_justetf_fields(db: sqlite3.Connection) -> None:
             for eid, isin in rows
         }
         for i, fut in enumerate(as_completed(futures), 1):
-            etf_id, isin, ter, category, err = fut.result()
+            etf_id, isin, ter, category, pea, err = fut.result()
             if err is not None:
                 errors += 1
                 print(f"[{i}/{len(rows)}] {etf_id} ERROR {err}")
@@ -367,19 +427,33 @@ def refresh_justetf_fields(db: sqlite3.Connection) -> None:
                         "UPDATE etf SET category = ? WHERE id = ?",
                         (category, etf_id),
                     )
+                if pea is not None:
+                    db.execute(
+                        "UPDATE etf SET pea = ? WHERE id = ?",
+                        (pea, etf_id),
+                    )
                 db.commit()
             if ter is not None:
                 with_ter += 1
             if category is not None:
                 with_cat += 1
+            if pea is not None:
+                with_pea += 1
+                if pea:
+                    pea_yes += 1
             ter_txt = f" ter={ter:.4f}%" if ter is not None else " ter=—"
             cat_txt = f" {category}" if category else " cat=—"
-            print(f"[{i}/{len(rows)}] {etf_id} {isin}{ter_txt}{cat_txt}")
+            if pea is None:
+                pea_txt = " pea=—"
+            else:
+                pea_txt = " PEA" if pea else " pea=non"
+            print(f"[{i}/{len(rows)}] {etf_id} {isin}{ter_txt}{cat_txt}{pea_txt}")
 
     elapsed = time.time() - start
     print(
         f"\nTerminé en {elapsed:.1f}s : "
-        f"{with_ter} TER, {with_cat} catégories, {errors} erreurs"
+        f"{with_ter} TER, {with_cat} catégories, "
+        f"{with_pea} PEA ({pea_yes} éligibles), {errors} erreurs"
     )
 
 
@@ -388,7 +462,7 @@ def main() -> None:
     parser.add_argument(
         "--justetf",
         action="store_true",
-        help="Ne rafraîchit que TER et catégorie justETF (sans Yahoo).",
+        help="Ne rafraîchit que TER, catégorie et PEA justETF (sans Yahoo).",
     )
     args = parser.parse_args()
 
@@ -401,12 +475,17 @@ def main() -> None:
 
         print("Téléchargement de la liste ETF Euronext (XPAR)…")
         listing = fetch_euronext_etf_listing()
-        print(f"{len(listing)} ETF à traiter (noms Yahoo + TER/catégorie justETF)")
+        print(
+            f"{len(listing)} ETF à traiter "
+            "(noms Yahoo + TER/catégorie/PEA justETF)"
+        )
 
         ok = 0
         fallback = 0
         with_ter = 0
         with_cat = 0
+        with_pea = 0
+        pea_yes = 0
         from_justetf = 0
         from_yahoo_ter = 0
         errors = 0
@@ -424,11 +503,12 @@ def main() -> None:
                     isin,
                     ter,
                     category,
+                    pea,
                     from_yahoo,
                     ter_source,
                     err,
                 ) = fut.result()
-                upsert_etf(db, symbol, name, isin, ter, category)
+                upsert_etf(db, symbol, name, isin, ter, category, pea)
 
                 if err is not None:
                     errors += 1
@@ -442,21 +522,30 @@ def main() -> None:
                         from_yahoo_ter += 1
                 if category:
                     with_cat += 1
+                if pea is not None:
+                    with_pea += 1
+                    if pea:
+                        pea_yes += 1
                 src = f" {ter_source}" if ter_source else ""
                 ter_txt = (
                     f" ter={ter:.4f}%{src}" if ter is not None else " ter=—"
                 )
                 cat_txt = f" {category}" if category else ""
+                if pea is None:
+                    pea_txt = ""
+                else:
+                    pea_txt = " PEA" if pea else " pea=non"
                 if from_yahoo:
                     ok += 1
                     print(
-                        f"[{i}/{len(listing)}] {symbol} {name}{ter_txt}{cat_txt}"
+                        f"[{i}/{len(listing)}] {symbol} "
+                        f"{name}{ter_txt}{cat_txt}{pea_txt}"
                     )
                 else:
                     fallback += 1
                     print(
                         f"[{i}/{len(listing)}] {symbol} "
-                        f"(nom Euronext) {name}{ter_txt}{cat_txt}"
+                        f"(nom Euronext) {name}{ter_txt}{cat_txt}{pea_txt}"
                     )
 
         listed_ids = [sym for sym, _, _ in listing]
@@ -474,6 +563,7 @@ def main() -> None:
             f"{ok} Yahoo, {fallback} repli Euronext, "
             f"{with_ter} TER ({from_justetf} justETF, "
             f"{from_yahoo_ter} Yahoo), {with_cat} catégories, "
+            f"{with_pea} PEA ({pea_yes} éligibles), "
             f"{errors} erreurs"
         )
     finally:

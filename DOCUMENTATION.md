@@ -212,9 +212,9 @@ Les résultats sont affichés en notation compacte. Export CSV.
 Fiche d’un ETF du référentiel Paris (table `etf`).
 
 - recherche avec **autocomplétion** (nom ou ticker, 20 résultats max) ;
-- **filtre par catégorie** justETF : option **Tous** (tout le référentiel) ou une classe (Actions, Obligations, …) ; un clic sur une ligne ouvre la fiche (prix, TER, catégorie). La recherche par mot-clé (nom / ticker) est limitée aux ETF de la catégorie sélectionnée ;
-- URL bookmarkable : `/etf?id=B28A` ou `/etf?category=Obligations&id=B28A` ;
-- affichage du **nom**, du **ticker**, du **dernier cours** connu (`pricingETF`, avec la date), du **TER** et de la **catégorie** justETF lorsqu’ils sont disponibles (sinon « — » ; TER : repli Yahoo si justETF n’a pas la fiche).
+- **filtres** justETF, combinables : **classe d’actifs** (Toutes les classes, ou Actions, Obligations, …) et **PEA** (tous, éligible, non éligible). Un clic sur une ligne ouvre la fiche (prix, TER, catégorie, **PEA**). La recherche par mot-clé (nom / ticker) est limitée aux ETF des filtres sélectionnés ;
+- URL bookmarkable : `/etf?id=B28A`, `/etf?category=Obligations&id=B28A` ou `/etf?pea=1&category=Actions` ;
+- affichage du **nom**, du **ticker**, du **dernier cours** connu (`pricingETF`, avec la date), du **TER**, de la **catégorie** justETF et de l’**éligibilité PEA** justETF lorsqu’ils sont disponibles (sinon « — » ; TER : repli Yahoo si justETF n’a pas la fiche).
 
 ### 4.8 Portefeuille ETF (`/portefeuille-etf`)
 
@@ -238,7 +238,7 @@ Base : `inv.db` (surcharge possible via `PORTEFEUILLE_DB`).
 | Entité | Rôle |
 | --- | --- |
 | **stocks** | Référentiel actions : mnémo (`id`), nom, nombre d’actions. |
-| **etf** | Référentiel ETF Paris : mnémo (`id`), ISIN, nom long Yahoo, TER en % (`ter`), catégorie justETF (`category` : Actions, Obligations, etc.). |
+| **etf** | Référentiel ETF Paris : mnémo (`id`), ISIN, nom long Yahoo, TER en % (`ter`), catégorie justETF (`category` : Actions, Obligations, etc.), éligibilité PEA justETF (`pea` : 1 / 0 / NULL). |
 | **wallet** | Positions actions : quantité, date d’achat (`JJ/MM/AAAA`), prix, cumul de dividendes. |
 | **walletETF** | Positions ETF : mnémo (`id`), quantité, prix d’achat, date d’achat (`JJ/MM/AAAA`). |
 | **walletDetails** | Une seule ligne : liquidité du portefeuille actions. |
@@ -270,7 +270,7 @@ Caractéristiques communes :
 - 3 workers, backoff en cas de rate-limit (5 / 15 / 45 s) ;
 - **idempotents** : on écrase seulement les (id, date) ou (id, année) renvoyés ; le reste de l’historique est conservé.
 
-Les référentiels `get_stocks.py` et `get_etfs.py` ne sont **pas** exposés dans l’UI : ils se lancent en ligne de commande. `get_stocks.py` télécharge le CSV officiel Euronext (`mics=XPAR,ALXP`), ne garde que les lignes dont le marché mentionne « Paris », puis enrichit nom et flottant via Yahoo. `get_etfs.py` fait de même pour les ETP Paris (`mics=XPAR`) : nom Yahoo, ISIN Euronext, TER et catégorie justETF (fiche `etf-profile.html?isin=…`). Si justETF n’a pas la fiche, repli TER sur Yahoo `netExpenseRatio` (0 ou absent → `NULL`).
+Les référentiels `get_stocks.py` et `get_etfs.py` ne sont **pas** exposés dans l’UI : ils se lancent en ligne de commande. `get_stocks.py` télécharge le CSV officiel Euronext (`mics=XPAR,ALXP`), ne garde que les lignes dont le marché mentionne « Paris », puis enrichit nom et flottant via Yahoo. `get_etfs.py` fait de même pour les ETP Paris (`mics=XPAR`) : nom Yahoo, ISIN Euronext, TER, catégorie et éligibilité PEA justETF (fiche FR `etf-profile.html?isin=…`, badge `etf-profile-controls_pea-label`). Si justETF n’a pas la fiche, repli TER sur Yahoo `netExpenseRatio` (0 ou absent → `NULL`) et PEA à `NULL`.
 
 ---
 
@@ -289,7 +289,7 @@ Les référentiels `get_stocks.py` et `get_etfs.py` ne sont **pas** exposés dan
 - **Pas de lots multiples** : une position = un titre.
 - **Dividendes du portefeuille** : saisie manuelle (cumul), distincte de l’historique Yahoo utilisé pour le screening.
 - **Cours différés** : clôture Yahoo, pas le carnet d’ordres Euronext.
-- **Couverture Yahoo** : titres délistés, illiquides ou mal mappés peuvent n’avoir ni cours, ni PER, ni dividendes. Le TER ETF vient de justETF (plus complet que Yahoo) ; quelques produits Paris hors justETF restent à « — ».
+- **Couverture Yahoo** : titres délistés, illiquides ou mal mappés peuvent n’avoir ni cours, ni PER, ni dividendes. Le TER ETF et l’éligibilité PEA viennent de justETF (plus complet que Yahoo) ; quelques produits Paris hors justETF restent à « — ». L’indicateur PEA n’est pas officiel (AMF / courtier / DIC font foi).
 - **Rate-limit Yahoo** : un refresh complet du référentiel (~600 titres) peut durer plusieurs minutes.
 - **Application locale** : `127.0.0.1`, port 5001 par défaut (`PORT` surchargeable). Aucune auth.
 
@@ -310,8 +310,8 @@ Scripts de données (venv activé, à la racine du projet) :
 
 ```bash
 python get_stocks.py      # référentiel Euronext Paris
-python get_etfs.py        # référentiel ETF Paris (noms Yahoo + TER/catégorie justETF)
-python get_etfs.py --justetf  # TER + catégorie justETF seulement
+python get_etfs.py        # référentiel ETF Paris (noms Yahoo + TER/catégorie/PEA justETF)
+python get_etfs.py --justetf  # TER + catégorie + PEA justETF seulement
 python get_pricing.py     # cours / PER / RSI
 python get_pricing_etf.py # cours ETF
 python get_dividends.py   # dividendes

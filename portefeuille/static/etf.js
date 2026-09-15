@@ -1,14 +1,15 @@
 /**
- * Page ETF : recherche par nom/ticker limitée à la catégorie du
- * filtre (Tous = tout le référentiel), tableau des ETF de la classe,
- * puis fiche (prix, TER, catégorie). L'URL reflète `id` et
- * éventuellement `category`.
+ * Page ETF : recherche par nom/ticker limitée aux filtres
+ * (catégorie + PEA ; Tous = tout le référentiel), tableau filtré,
+ * puis fiche (prix, TER, catégorie, PEA). L'URL reflète `id`,
+ * éventuellement `category` et `pea`.
  */
 const searchEl = document.getElementById("etf-search");
 const suggestEl = document.getElementById("etf-suggestions");
 const statusEl = document.getElementById("status");
 const detailEl = document.getElementById("etf-detail");
 const categoryEl = document.getElementById("etf-category-filter");
+const peaEl = document.getElementById("etf-pea-filter");
 const tableEl = document.getElementById("etf-table");
 const tbody = tableEl.querySelector("tbody");
 
@@ -65,6 +66,12 @@ function formatRsi(v) {
   return v != null && !Number.isNaN(v) ? nfRsi.format(v) : "";
 }
 
+function formatPea(v) {
+  if (v === true) return "Oui";
+  if (v === false) return "Non";
+  return "—";
+}
+
 function rsiClass(v) {
   if (v == null || Number.isNaN(v)) return "";
   if (v < 30) return "good";
@@ -116,12 +123,14 @@ function compare(a, b, key, dir) {
   return dir === "asc" ? cmp : -cmp;
 }
 
-function syncUrl({ id, category } = {}) {
+function syncUrl({ id, category, pea } = {}) {
   const url = new URL(window.location.href);
   if (id) url.searchParams.set("id", id);
   else url.searchParams.delete("id");
   if (category) url.searchParams.set("category", category);
   else url.searchParams.delete("category");
+  if (pea === "1" || pea === "0") url.searchParams.set("pea", pea);
+  else url.searchParams.delete("pea");
   window.history.replaceState(null, "", url);
 }
 
@@ -155,6 +164,27 @@ function selectedCategory() {
   return categoryEl.value || "";
 }
 
+function selectedPea() {
+  const v = peaEl.value;
+  return v === "1" || v === "0" ? v : "";
+}
+
+function currentFilters() {
+  return {
+    category: selectedCategory() || null,
+    pea: selectedPea() || null,
+  };
+}
+
+function listQuery() {
+  const params = new URLSearchParams();
+  const category = selectedCategory();
+  const pea = selectedPea();
+  if (category) params.set("category", category);
+  if (pea) params.set("pea", pea);
+  return params;
+}
+
 async function runSearch(q) {
   const seq = ++searchSeq;
   if (!q.trim()) {
@@ -164,7 +194,9 @@ async function runSearch(q) {
   try {
     const params = new URLSearchParams({ q });
     const category = selectedCategory();
+    const pea = selectedPea();
     if (category) params.set("category", category);
+    if (pea) params.set("pea", pea);
     const resp = await fetch(`/api/etf/search?${params}`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -204,7 +236,7 @@ function selectEtf(id) {
   hideSuggestions();
   if (!id) return;
   state.selectedId = id;
-  syncUrl({ id, category: selectedCategory() || null });
+  syncUrl({ id, ...currentFilters() });
   renderTable();
   loadDetail(id);
 }
@@ -246,6 +278,11 @@ function renderDetail(data) {
 
   const catEl = document.getElementById("etf-category");
   catEl.textContent = data.category ? data.category : "—";
+
+  const peaEl = document.getElementById("etf-pea");
+  peaEl.textContent = formatPea(data.pea);
+  peaEl.classList.remove("good", "bad");
+  if (data.pea === true) peaEl.classList.add("good");
 
   const rsiEl = document.getElementById("etf-rsi");
   rsiEl.textContent =
@@ -318,7 +355,7 @@ async function loadCategories() {
   }
   const cats = await resp.json();
   const current = categoryEl.value;
-  const opts = ['<option value="">Tous</option>'];
+  const opts = ['<option value="">Toutes les classes</option>'];
   for (const cat of cats) {
     opts.push(
       `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`,
@@ -328,11 +365,10 @@ async function loadCategories() {
   if (current && cats.includes(current)) categoryEl.value = current;
 }
 
-async function loadCategoryList(category) {
+async function loadFilteredList() {
   setStatus("Chargement…");
   try {
-    const params = new URLSearchParams();
-    if (category) params.set("category", category);
+    const params = listQuery();
     const qs = params.toString();
     const resp = await fetch(qs ? `/api/etf/list?${qs}` : "/api/etf/list");
     if (!resp.ok) {
@@ -347,10 +383,9 @@ async function loadCategoryList(category) {
   }
 }
 
-categoryEl.addEventListener("change", async () => {
-  const category = selectedCategory();
+async function onFiltersChange() {
   hideSuggestions();
-  await loadCategoryList(category);
+  await loadFilteredList();
   if (state.selectedId) {
     const stillThere = state.rows.some((r) => r.id === state.selectedId);
     if (!stillThere) {
@@ -359,15 +394,19 @@ categoryEl.addEventListener("change", async () => {
       searchEl.value = "";
     }
   }
-  syncUrl({ id: state.selectedId, category: category || null });
+  syncUrl({ id: state.selectedId, ...currentFilters() });
   renderTable();
   if (searchEl.value.trim()) runSearch(searchEl.value);
-});
+}
+
+categoryEl.addEventListener("change", onFiltersChange);
+peaEl.addEventListener("change", onFiltersChange);
 
 async function init() {
   const params = new URLSearchParams(window.location.search);
   const initialId = params.get("id");
   const initialCategory = params.get("category") || "";
+  const initialPea = params.get("pea") || "";
   try {
     await loadCategories();
   } catch (e) {
@@ -375,7 +414,8 @@ async function init() {
     return;
   }
   if (initialCategory) categoryEl.value = initialCategory;
-  await loadCategoryList(selectedCategory());
+  if (initialPea === "1" || initialPea === "0") peaEl.value = initialPea;
+  await loadFilteredList();
   if (initialId) selectEtf(initialId);
 }
 

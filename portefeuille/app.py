@@ -119,6 +119,27 @@ def get_db_rw() -> sqlite3.Connection:
     return conn
 
 
+def json_pea(value) -> bool | None:
+    """SQLite INTEGER 0/1/NULL → JSON false/true/null."""
+    if value is None:
+        return None
+    return bool(value)
+
+
+def parse_pea_filter(raw) -> int | None:
+    """Filtre query `pea` : None = tous, 1 = éligible, 0 = non."""
+    if raw is None:
+        return None
+    s = str(raw).strip().lower()
+    if not s:
+        return None
+    if s in ("1", "true", "oui", "yes"):
+        return 1
+    if s in ("0", "false", "non", "no"):
+        return 0
+    return None
+
+
 def iso_to_fr_date(date_str: str) -> str:
     """Convertit une date `YYYY-MM-DD` (telle qu'envoyée par
     `<input type="date">`) vers le format de stockage `DD/MM/YYYY`.
@@ -173,6 +194,9 @@ def ensure_schema() -> None:
                 conn.execute(
                     "ALTER TABLE pricingETF ADD COLUMN rsi REAL"
                 )
+            etf_cols = _table_columns(conn, "etf")
+            if etf_cols and "pea" not in etf_cols:
+                conn.execute("ALTER TABLE etf ADD COLUMN pea INTEGER")
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS "
                 "wallet_proprietaire_id "
@@ -1557,14 +1581,15 @@ def api_action_detail(stock_id: str):
 @app.route("/api/etf/search")
 def api_etf_search():
     """Autocomplete pour la page ETF : au plus 20 ETF de la table
-    `etf` dont l'id (ticker) ou le nom contient `q`. Si `category` est
-    fourni, la recherche est limitée à cette classe d'actifs.
+    `etf` dont l'id (ticker) ou le nom contient `q`. Les filtres
+    optionnels `category` et `pea` (1 / 0) restreignent le résultat.
     """
     q = (request.args.get("q") or "").strip()
     if not q:
         return jsonify([])
     like = f"%{q}%"
     category = (request.args.get("category") or "").strip()
+    pea = parse_pea_filter(request.args.get("pea"))
     sql = """
         SELECT id, COALESCE(name, id) AS name
         FROM etf
@@ -1574,6 +1599,9 @@ def api_etf_search():
     if category:
         sql += " AND category = ?"
         params.append(category)
+    if pea is not None:
+        sql += " AND pea = ?"
+        params.append(pea)
     sql += " ORDER BY name COLLATE NOCASE LIMIT 20"
     try:
         with get_db() as conn:
@@ -1611,10 +1639,12 @@ def api_etf_categories():
 
 @app.route("/api/etf/list")
 def api_etf_list():
-    """ETF avec dernier cours `pricingETF`. Sans `category` (Tous),
-    renvoie tout le référentiel ; sinon uniquement la classe demandée.
+    """ETF avec dernier cours `pricingETF`. Filtres optionnels
+    `category` (classe d'actifs) et `pea` (1 = éligible, 0 = non).
+    Sans filtre : tout le référentiel.
     """
     category = (request.args.get("category") or "").strip()
+    pea = parse_pea_filter(request.args.get("pea"))
     query = """
         WITH latest_price AS (
             SELECT p.id, p.date, p.price, p.rsi
@@ -1630,16 +1660,23 @@ def api_etf_list():
             COALESCE(e.name, e.id)     AS name,
             e.ter                      AS ter,
             e.category                 AS category,
+            e.pea                      AS pea,
             lp.date                    AS price_date,
             lp.price                   AS price,
             lp.rsi                     AS rsi
         FROM etf e
         LEFT JOIN latest_price lp ON lp.id = e.id
     """
+    filters = []
     params = []
     if category:
-        query += " WHERE e.category = ?"
+        filters.append("e.category = ?")
         params.append(category)
+    if pea is not None:
+        filters.append("e.pea = ?")
+        params.append(pea)
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY name COLLATE NOCASE"
     try:
         with get_db() as conn:
@@ -1648,18 +1685,20 @@ def api_etf_list():
         return jsonify({"error": str(exc)}), 500
     except sqlite3.Error as exc:
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    for row in rows:
+        row["pea"] = json_pea(row.get("pea"))
     return jsonify(rows)
 
 
 @app.route("/api/etf/<etf_id>")
 def api_etf_detail(etf_id: str):
-    """Fiche d'un ETF : nom, ticker, catégorie, TER, dernier cours
-    et RSI (table `pricingETF`).
+    """Fiche d'un ETF : nom, ticker, catégorie, TER, éligibilité PEA,
+    dernier cours et RSI (table `pricingETF`).
     """
     try:
         with get_db() as conn:
             etf = conn.execute(
-                "SELECT id, COALESCE(name, id) AS name, ter, category "
+                "SELECT id, COALESCE(name, id) AS name, ter, category, pea "
                 "FROM etf WHERE id = ?",
                 (etf_id,),
             ).fetchone()
@@ -1690,6 +1729,7 @@ def api_etf_detail(etf_id: str):
         "name": etf["name"],
         "ter": etf["ter"],
         "category": etf["category"],
+        "pea": json_pea(etf["pea"]),
         "price": latest["price"] if latest else None,
         "price_date": latest["date"] if latest else None,
         "rsi": latest_rsi["rsi"] if latest_rsi else None,

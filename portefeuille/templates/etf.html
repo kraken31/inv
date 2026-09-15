@@ -47,7 +47,12 @@
         <ul id="etf-suggestions" class="autocomplete-list" hidden></ul>
       </div>
       <select id="etf-category-filter" aria-label="Filtrer par catégorie">
-        <option value="">Tous</option>
+        <option value="">Toutes les classes</option>
+      </select>
+      <select id="etf-pea-filter" aria-label="Filtrer par éligibilité PEA">
+        <option value="">PEA : tous</option>
+        <option value="1">Éligible PEA</option>
+        <option value="0">Non éligible</option>
       </select>
     </section>
 
@@ -72,6 +77,10 @@
         <div class="kpi-card">
           <div class="kpi-label">Catégorie</div>
           <div class="kpi-value kpi-text" id="etf-category">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">PEA</div>
+          <div class="kpi-value kpi-text" id="etf-pea">—</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">RSI</div>
