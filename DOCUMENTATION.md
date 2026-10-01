@@ -124,11 +124,11 @@ Navigation latérale commune, en quatre menus :
 - **Synthèse** : Répartition ;
 - **Actions** : Portefeuille, Action, PER, RSI, Rendement, Croissance ;
 - **ETF** : Portefeuille ETF, ETF, RSI ;
-- **Crypto** : Portefeuilles, RSI.
+- **Crypto** : Portefeuilles, Crypto, RSI.
 
 Barre supérieure commune : boutons **↻ Tous les cours**, **↻ Cours action**, **↻ Cours ETF**, **↻ Cours crypto**, **↻ Dividendes**, **↻ Résultats** (voir § 6).
 
-Recherche (sauf fiches Action et ETF) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…` ou `/etf?id=…`).
+Recherche (sauf fiches Action, ETF et Crypto) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…`, `/etf?id=…` ou `/crypto?id=…`).
 
 ### 4.1 Synthèse (`/synthese`)
 
@@ -270,7 +270,16 @@ La valorisation utilise le dernier cours Yahoo en euros (`pricingCrypto`, ticker
 
 Le tableau de détail affiche aussi le **RSI(14)** du dernier cours (`pricingCrypto.rsi`), coloré comme sur le portefeuille ETF (vert sous 30, rouge au-dessus de 70).
 
-### 4.12 RSI crypto (`/rsi-crypto`)
+### 4.12 Crypto (`/crypto`)
+
+Fiche d’une crypto du référentiel (table `crypto`), calquée sur `/etf`.
+
+- liste de toutes les cryptos enregistrées ;
+- recherche avec **autocomplétion** (nom, symbole ou ticker Yahoo) ;
+- un clic sur une ligne ouvre la fiche : **nom**, **ticker** Yahoo (`BTC-EUR`, …) et **RSI(14)** ;
+- URL bookmarkable : `/crypto?id=BTC`.
+
+### 4.13 RSI crypto (`/rsi-crypto`)
 
 Screener « survendu » du référentiel crypto, calqué sur `/rsi-etf`.
 

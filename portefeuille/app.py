@@ -470,6 +470,11 @@ def etf_page():
     return render_template("etf.html")
 
 
+@app.route("/crypto")
+def crypto_page():
+    return render_template("crypto.html")
+
+
 @app.route("/portefeuille-etf")
 def portefeuille_etf_page():
     return render_template("portefeuille_etf.html")
@@ -2336,6 +2341,108 @@ def api_etf_detail(etf_id: str):
         "pea": json_pea(etf["pea"]),
         "price": latest["price"] if latest else None,
         "price_date": latest["date"] if latest else None,
+        "rsi": latest_rsi["rsi"] if latest_rsi else None,
+        "rsi_date": latest_rsi["date"] if latest_rsi else None,
+    })
+
+
+@app.route("/api/crypto/search")
+def api_crypto_search():
+    """Autocomplete : au plus 20 cryptos dont le symbole, le nom ou
+    le ticker Yahoo contient `q`.
+    """
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify([])
+    like = f"%{q}%"
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT id, COALESCE(name, id) AS name,
+                           COALESCE(yahoo, id) AS ticker
+                    FROM crypto
+                    WHERE id LIKE ? OR name LIKE ? OR yahoo LIKE ?
+                    ORDER BY name COLLATE NOCASE
+                    LIMIT 20
+                    """,
+                    (like, like, like),
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/crypto/list")
+def api_crypto_list():
+    """Référentiel crypto avec le dernier RSI connu."""
+    query = """
+        WITH latest_rsi AS (
+            SELECT p.id, p.date, p.rsi
+            FROM pricingCrypto p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingCrypto
+                WHERE rsi IS NOT NULL
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        )
+        SELECT
+            c.id                       AS id,
+            COALESCE(c.name, c.id)     AS name,
+            COALESCE(c.yahoo, c.id)    AS ticker,
+            lr.date                    AS rsi_date,
+            lr.rsi                     AS rsi
+        FROM crypto c
+        LEFT JOIN latest_rsi lr ON lr.id = c.id
+        ORDER BY name COLLATE NOCASE
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/crypto/<crypto_id>")
+def api_crypto_detail(crypto_id: str):
+    """Fiche d'une crypto : nom, ticker Yahoo et RSI."""
+    try:
+        with get_db() as conn:
+            crypto = conn.execute(
+                "SELECT id, COALESCE(name, id) AS name, "
+                "COALESCE(yahoo, id) AS ticker "
+                "FROM crypto WHERE id = ?",
+                (crypto_id,),
+            ).fetchone()
+            if crypto is None:
+                return (
+                    jsonify({"error": f"Crypto introuvable: {crypto_id}"}),
+                    404,
+                )
+            latest_rsi = conn.execute(
+                "SELECT date, rsi FROM pricingCrypto "
+                "WHERE id = ? AND rsi IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1",
+                (crypto_id,),
+            ).fetchone()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    return jsonify({
+        "id": crypto["id"],
+        "name": crypto["name"],
+        "ticker": crypto["ticker"],
         "rsi": latest_rsi["rsi"] if latest_rsi else None,
         "rsi_date": latest_rsi["date"] if latest_rsi else None,
     })

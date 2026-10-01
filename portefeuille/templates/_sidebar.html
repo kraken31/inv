@@ -4,7 +4,7 @@
   'rendement_page', 'securite_page',
 ] %}
 {% set in_etf = ep in ['portefeuille_etf_page', 'etf_page', 'rsi_etf_page'] %}
-{% set in_crypto = ep in ['portefeuille_crypto_page', 'rsi_crypto_page'] %}
+{% set in_crypto = ep in ['portefeuille_crypto_page', 'crypto_page', 'rsi_crypto_page'] %}
 {% set in_synthese = ep == 'synthese_page' %}
 <nav class="sidebar-nav">
   <details class="nav-group{% if in_synthese %} current{% endif %}" open>
@@ -36,6 +36,7 @@
     <summary>Crypto</summary>
     <div class="nav-sub">
       <a href="{{ url_for('portefeuille_crypto_page') }}"{% if ep == 'portefeuille_crypto_page' %} class="active"{% endif %}>Portefeuilles</a>
+      <a href="{{ url_for('crypto_page') }}"{% if ep == 'crypto_page' %} class="active"{% endif %}>Crypto</a>
       <a href="{{ url_for('rsi_crypto_page') }}"{% if ep == 'rsi_crypto_page' %} class="active"{% endif %}>RSI</a>
     </div>
   </details>
