@@ -125,7 +125,7 @@ Navigation latérale commune, en trois menus :
 - **ETF** : Portefeuille ETF, ETF, RSI ;
 - **Crypto** : Portefeuilles, RSI.
 
-Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats**, **↻ Cours ETF**, **↻ Cours crypto** (voir § 6).
+Barre supérieure commune : boutons **↻ Tous les cours**, **↻ Cours action**, **↻ Cours ETF**, **↻ Cours crypto**, **↻ Dividendes**, **↻ Résultats** (voir § 6).
 
 Recherche (sauf fiches Action et ETF) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…` ou `/etf?id=…`).
 
@@ -304,7 +304,8 @@ Les jobs sont indépendants et lançables en parallèle depuis n’importe quel 
 
 | Bouton | Script | Effet |
 | --- | --- | --- |
-| ↻ Cours | `get_pricing.py` | Dernier cours, capitalisation, PER, RSI pour **tous** les titres du référentiel. |
+| ↻ Tous les cours | `get_pricing.py`, `get_pricing_etf.py`, `get_pricing_crypto.py` | Lance les trois téléchargements de cours en parallèle. Le statut résume l’avancement de chacun. |
+| ↻ Cours action | `get_pricing.py` | Dernier cours, capitalisation, PER, RSI pour **tous** les titres du référentiel actions. |
 | ↻ Dividendes | `get_dividends.py` | Historique de dividendes par année. |
 | ↻ Résultats | `get_results.py` | Historique de résultat net par année. |
 | ↻ Cours ETF | `get_pricing_etf.py` | Dernier cours des ETF Paris (`etf` → `pricingETF`). |
@@ -323,7 +324,7 @@ Les référentiels `get_stocks.py` et `get_etfs.py` ne sont **pas** exposés dan
 
 ## 7. Parcours utilisateur types
 
-1. **Tenir le portefeuille** — Ajouter / modifier une ligne, saisir la liquidité, lancer ↻ Cours, relire synthèse et +/- value.
+1. **Tenir le portefeuille** — Ajouter / modifier une ligne, saisir la liquidité, lancer ↻ Cours action (ou ↻ Tous les cours), relire synthèse et +/- value.
 2. **Chercher une idée d’achat** — PER (pas cher) ∩ RSI (survendu) ∩ Croissance (bénéfices croissants), puis ouvrir la fiche Action.
 3. **Comparer les rendements** — écran Rendement, tri 5 ans, croiser avec le PER coloré.
 4. **Analyser un titre** — fiche Action depuis n’importe quel tableau, ou recherche directe.

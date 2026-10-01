@@ -10,21 +10,16 @@
   <header class="topbar">
     <h1>Portefeuille crypto</h1>
     <nav class="nav">
+      <button id="refresh-pricing-all" type="button" class="nav-action"
+              title="Lance les cours actions, ETF et crypto">
+        ↻ Tous les cours
+      </button>
+      <span id="refresh-pricing-all-status" class="nav-status"></span>
       <button id="refresh-pricing" type="button" class="nav-action"
-              title="Lance get_pricing.py pour rafraîchir les cours">
-        ↻ Cours
+              title="Lance get_pricing.py pour rafraîchir les cours des actions">
+        ↻ Cours action
       </button>
       <span id="refresh-pricing-status" class="nav-status"></span>
-      <button id="refresh-dividends" type="button" class="nav-action"
-              title="Lance get_dividends.py pour rafraîchir les dividendes">
-        ↻ Dividendes
-      </button>
-      <span id="refresh-dividends-status" class="nav-status"></span>
-      <button id="refresh-results" type="button" class="nav-action"
-              title="Lance get_results.py pour rafraîchir les résultats">
-        ↻ Résultats
-      </button>
-      <span id="refresh-results-status" class="nav-status"></span>
       <button id="refresh-pricing-etf" type="button" class="nav-action"
               title="Lance get_pricing_etf.py pour rafraîchir les cours ETF">
         ↻ Cours ETF
@@ -35,6 +30,16 @@
         ↻ Cours crypto
       </button>
       <span id="refresh-pricing-crypto-status" class="nav-status"></span>
+      <button id="refresh-dividends" type="button" class="nav-action"
+              title="Lance get_dividends.py pour rafraîchir les dividendes">
+        ↻ Dividendes
+      </button>
+      <span id="refresh-dividends-status" class="nav-status"></span>
+      <button id="refresh-results" type="button" class="nav-action"
+              title="Lance get_results.py pour rafraîchir les résultats">
+        ↻ Résultats
+      </button>
+      <span id="refresh-results-status" class="nav-status"></span>
     </nav>
   </header>
 

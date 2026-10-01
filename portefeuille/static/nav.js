@@ -100,10 +100,124 @@ function setupRefreshButton(buttonId, statusId, job) {
   });
 
   fetchStatus();
+  return { job, url, applyState, fetchStatus };
 }
 
-setupRefreshButton("refresh-pricing", "refresh-pricing-status", "pricing");
-setupRefreshButton("refresh-pricing-etf", "refresh-pricing-etf-status", "pricing_etf");
-setupRefreshButton("refresh-pricing-crypto", "refresh-pricing-crypto-status", "pricing_crypto");
+const pricingControls = [
+  setupRefreshButton("refresh-pricing", "refresh-pricing-status", "pricing"),
+  setupRefreshButton("refresh-pricing-etf", "refresh-pricing-etf-status", "pricing_etf"),
+  setupRefreshButton("refresh-pricing-crypto", "refresh-pricing-crypto-status", "pricing_crypto"),
+].filter(Boolean);
+
 setupRefreshButton("refresh-dividends", "refresh-dividends-status", "dividends");
 setupRefreshButton("refresh-results", "refresh-results-status", "results");
+
+const PRICING_LABELS = {
+  pricing: "Actions",
+  pricing_etf: "ETF",
+  pricing_crypto: "Crypto",
+};
+
+function setupRefreshAllButton(controls) {
+  const button = document.getElementById("refresh-pricing-all");
+  const status = document.getElementById("refresh-pricing-all-status");
+  if (!button || !status || controls.length === 0) return;
+
+  let pollTimer = null;
+
+  function setStatus(text, cls = "") {
+    status.textContent = text;
+    status.className = "nav-status" + (cls ? ` ${cls}` : "");
+    status.title = text;
+  }
+
+  function progressLabel(data) {
+    const name = PRICING_LABELS[data.job] || data.job;
+    if (data.running) {
+      const counter = data.last_log && data.last_log.match(/^\[(\d+\/\d+)\]/);
+      return counter ? `${name} ${counter[1]}` : `${name}…`;
+    }
+    if (data.exit_code === 0) return `${name} ✓`;
+    if (data.exit_code != null) return `${name} échec`;
+    return `${name}…`;
+  }
+
+  function applySummary(states) {
+    const running = states.some((s) => s.running);
+    if (running) {
+      button.disabled = true;
+      button.classList.add("running");
+      setStatus(states.map(progressLabel).join(" · "), "log");
+      if (!pollTimer) pollTimer = setInterval(fetchStatuses, 1500);
+      return;
+    }
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    button.disabled = false;
+    button.classList.remove("running");
+    const failed = states.filter((s) => s.exit_code != null && s.exit_code !== 0);
+    if (failed.length) {
+      setStatus(failed.map(progressLabel).join(" · "), "error");
+    } else if (states.length && states.every((s) => s.exit_code === 0)) {
+      setStatus("Terminé ✓", "success");
+    } else {
+      setStatus("");
+    }
+  }
+
+  async function fetchStatuses() {
+    try {
+      const states = [];
+      for (const ctrl of controls) {
+        const resp = await fetch(ctrl.url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        states.push(data);
+        ctrl.applyState(data);
+      }
+      applySummary(states);
+    } catch (e) {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      button.disabled = false;
+      button.classList.remove("running");
+      setStatus(`Erreur: ${e.message}`, "error");
+    }
+  }
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    setStatus("Démarrage…");
+    const errors = [];
+    for (const ctrl of controls) {
+      try {
+        const resp = await fetch(ctrl.url, { method: "POST" });
+        const data = await resp.json();
+        if (!resp.ok && resp.status !== 409) {
+          errors.push(data.error || ctrl.job);
+          continue;
+        }
+        ctrl.applyState(data);
+      } catch (e) {
+        errors.push(e.message);
+      }
+    }
+    if (errors.length === controls.length) {
+      button.disabled = false;
+      setStatus(`Erreur: ${errors[0]}`, "error");
+      return;
+    }
+    if (errors.length) {
+      setStatus(`Partiel: ${errors.join(", ")}`, "error");
+    }
+    fetchStatuses();
+  });
+
+  fetchStatuses();
+}
+
+setupRefreshAllButton(pricingControls);
