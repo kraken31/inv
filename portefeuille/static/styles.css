@@ -705,3 +705,102 @@ dialog.modal::backdrop {
   background: var(--neg);
   border-color: var(--neg);
 }
+
+.synthese-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.synthese-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 18px 14px;
+}
+
+.pie {
+  display: block;
+  width: 180px;
+  height: 180px;
+  margin: 8px auto 16px;
+}
+
+.pie path,
+.pie circle {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.pie a {
+  cursor: pointer;
+}
+
+.pie a:hover path,
+.pie a:hover circle,
+.pie a:focus path,
+.pie a:focus circle {
+  filter: brightness(1.2);
+}
+
+.pie-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pie-legend-item {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.pie-legend-item.muted {
+  color: var(--muted);
+}
+
+a.pie-legend-item {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+a.pie-legend-item:hover,
+a.pie-legend-item:focus {
+  color: var(--accent);
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.pie-amount,
+.pie-pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.pie-pct {
+  color: var(--muted);
+  min-width: 52px;
+  text-align: right;
+}
+
+.pie-total {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.pie-empty {
+  color: var(--muted);
+  text-align: center;
+  margin: 24px 0;
+}

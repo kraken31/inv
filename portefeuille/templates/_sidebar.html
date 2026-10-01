@@ -5,7 +5,14 @@
 ] %}
 {% set in_etf = ep in ['portefeuille_etf_page', 'etf_page', 'rsi_etf_page'] %}
 {% set in_crypto = ep in ['portefeuille_crypto_page', 'rsi_crypto_page'] %}
+{% set in_synthese = ep == 'synthese_page' %}
 <nav class="sidebar-nav">
+  <details class="nav-group{% if in_synthese %} current{% endif %}" open>
+    <summary>Synthèse</summary>
+    <div class="nav-sub">
+      <a href="{{ url_for('synthese_page') }}"{% if ep == 'synthese_page' %} class="active"{% endif %}>Répartition</a>
+    </div>
+  </details>
   <details class="nav-group{% if in_actions %} current{% endif %}" open>
     <summary>Actions</summary>
     <div class="nav-sub">

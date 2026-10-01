@@ -119,8 +119,9 @@ Sur l’écran Croissance, l’année **n** n’est pas l’année calendaire : 
 
 ## 4. Écrans
 
-Navigation latérale commune, en trois menus :
+Navigation latérale commune, en quatre menus :
 
+- **Synthèse** : Répartition ;
 - **Actions** : Portefeuille, Action, PER, RSI, Rendement, Croissance ;
 - **ETF** : Portefeuille ETF, ETF, RSI ;
 - **Crypto** : Portefeuilles, RSI.
@@ -129,7 +130,15 @@ Barre supérieure commune : boutons **↻ Tous les cours**, **↻ Cours action**
 
 Recherche (sauf fiches Action et ETF) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…` ou `/etf?id=…`).
 
-### 4.1 Portefeuille (`/`)
+### 4.1 Synthèse (`/synthese`)
+
+Un camembert par propriétaire, regroupé sur le même nom dans les portefeuilles actions, ETF et crypto.
+
+Chaque part est la **valorisation actuelle** (quantité × dernier cours), hors liquidité et hors dividendes. Les trois catégories sont toujours listées ; une part nulle n’apparaît pas dans le graphique et n’est pas cliquable. Le total est la somme des trois valorisations.
+
+Un clic sur une part ou sur sa ligne de légende ouvre le portefeuille correspondant : actions (`/?proprietaire=…`), ETF (`/portefeuille-etf?proprietaire=…`) ou crypto (`/portefeuille-crypto?proprietaire=…`).
+
+### 4.2 Portefeuille (`/`)
 
 Vue d’ensemble des positions.
 
@@ -147,7 +156,7 @@ Vue d’ensemble des positions.
 - **Modifier** : quantité, date, prix, dividende (la quantité peut être 0).
 - **Supprimer** : confirmation, retire la ligne du portefeuille (pas du référentiel).
 
-### 4.2 Action (`/action`)
+### 4.3 Action (`/action`)
 
 Fiche d’un titre du référentiel (pas seulement ceux du portefeuille).
 
@@ -157,7 +166,7 @@ Fiche d’un titre du référentiel (pas seulement ceux du portefeuille).
 - rendements n, n−1, 5 ans, 10 ans ;
 - tableaux d’historique **dividendes par année** et **résultats nets par année** (notation compacte, ex. « 40,6 M »).
 
-### 4.3 PER (`/per`)
+### 4.4 PER (`/per`)
 
 Screener « valorisation basse ».
 
@@ -168,7 +177,7 @@ Titres retenus :
 
 Tri par défaut : PER croissant. Export CSV.
 
-### 4.4 RSI (`/rsi`)
+### 4.5 RSI (`/rsi`)
 
 Screener « survendu ».
 
@@ -180,7 +189,7 @@ Titres retenus :
 
 Tri par défaut : RSI croissant. La ligne est verte si 0 < PER < 10, rouge sinon. Export CSV.
 
-### 4.5 Rendement (`/rendement`)
+### 4.6 Rendement (`/rendement`)
 
 Screener de rendement sur **tous les titres qui ont un PER**.
 
@@ -188,7 +197,7 @@ Colonnes : PER, dividende et rendement pour n, n−1, moyenne 5 ans, moyenne 10 
 
 Tri par défaut : rendement moyen 5 ans décroissant. Coloration PER : vert si 0 < PER < 10, rouge sinon. Export CSV.
 
-### 4.6 Croissance (`/securite`)
+### 4.7 Croissance (`/securite`)
 
 Screener « qualité des résultats + valorisation ».
 
@@ -208,7 +217,7 @@ Coloration selon la **croissance stricte consécutive** des résultats, en parta
 
 Les résultats sont affichés en notation compacte. Export CSV.
 
-### 4.7 ETF (`/etf`)
+### 4.8 ETF (`/etf`)
 
 Fiche d’un ETF du référentiel Paris (table `etf`).
 
@@ -217,7 +226,7 @@ Fiche d’un ETF du référentiel Paris (table `etf`).
 - URL bookmarkable : `/etf?id=B28A`, `/etf?category=Obligations&id=B28A` ou `/etf?pea=1&category=Actions` ;
 - affichage du **nom**, du **ticker**, du **dernier cours** connu (`pricingETF`, avec la date), du **TER**, de la **catégorie** justETF et de l’**éligibilité PEA** justETF lorsqu’ils sont disponibles (sinon « — » ; TER : repli Yahoo si justETF n’a pas la fiche).
 
-### 4.8 RSI ETF (`/rsi-etf`)
+### 4.9 RSI ETF (`/rsi-etf`)
 
 Screener « survendu » du référentiel ETF Paris, calqué sur `/rsi`.
 
@@ -230,7 +239,7 @@ ETF retenus :
 
 Colonnes : nom (lien vers `/etf?id=…`), TER, RSI. Tri par défaut : RSI croissant. Export CSV.
 
-### 4.9 Portefeuille ETF (`/portefeuille-etf`)
+### 4.10 Portefeuille ETF (`/portefeuille-etf`)
 
 Même écran que le portefeuille actions, appliqué aux positions `walletETF` :
 
@@ -243,7 +252,7 @@ Même écran que le portefeuille actions, appliqué aux positions `walletETF` :
 
 **Actions** : + Ajouter (ETF absents du portefeuille), modifier quantité / date / prix, supprimer.
 
-### 4.10 Portefeuille crypto (`/portefeuille-crypto`)
+### 4.11 Portefeuille crypto (`/portefeuille-crypto`)
 
 Même organisation que le portefeuille ETF (liste par propriétaire, puis détail), sans liquidité.
 
@@ -261,7 +270,7 @@ La valorisation utilise le dernier cours Yahoo en euros (`pricingCrypto`, ticker
 
 Le tableau de détail affiche aussi le **RSI(14)** du dernier cours (`pricingCrypto.rsi`), coloré comme sur le portefeuille ETF (vert sous 30, rouge au-dessus de 70).
 
-### 4.11 RSI crypto (`/rsi-crypto`)
+### 4.12 RSI crypto (`/rsi-crypto`)
 
 Screener « survendu » du référentiel crypto, calqué sur `/rsi-etf`.
 

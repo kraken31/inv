@@ -480,6 +480,11 @@ def portefeuille_crypto_page():
     return render_template("portefeuille_crypto.html")
 
 
+@app.route("/synthese")
+def synthese_page():
+    return render_template("synthese.html")
+
+
 @app.route("/securite")
 def securite_page():
     # On dérive l'année « n » depuis la table results : c'est la
@@ -1322,6 +1327,70 @@ def api_portefeuilles_crypto():
         return jsonify({"error": str(exc)}), 500
     except sqlite3.Error as exc:
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+def _valuation_by_owner(conn, table: str, pricing: str) -> list[sqlite3.Row]:
+    """Valorisation actuelle (quantité × dernier cours) par propriétaire."""
+    query = f"""
+        WITH latest_price AS (
+            SELECT p.id, p.price
+            FROM {pricing} p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM {pricing}
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        )
+        SELECT
+            w.proprietaire AS proprietaire,
+            SUM(COALESCE(w.quantity * lp.price, 0)) AS amount
+        FROM {table} w
+        LEFT JOIN latest_price lp ON lp.id = w.id
+        WHERE w.proprietaire IS NOT NULL
+          AND TRIM(w.proprietaire) != ''
+        GROUP BY w.proprietaire COLLATE NOCASE
+    """
+    return list(conn.execute(query))
+
+
+@app.route("/api/synthese")
+def api_synthese():
+    """Répartition de la valorisation actuelle par propriétaire,
+    entre actions, ETF et crypto. La liquidité n'est pas incluse.
+    """
+    try:
+        with get_db() as conn:
+            sources = (
+                ("actions", "wallet", "pricing"),
+                ("etf", "walletETF", "pricingETF"),
+                ("crypto", "walletCrypto", "pricingCrypto"),
+            )
+            buckets = {key: {} for key, _, _ in sources}
+            display = {}
+            for key, table, pricing in sources:
+                for row in _valuation_by_owner(conn, table, pricing):
+                    name = row["proprietaire"]
+                    fold = name.casefold()
+                    display.setdefault(fold, name)
+                    buckets[key][fold] = float(row["amount"] or 0)
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+
+    rows = []
+    for fold in sorted(display, key=lambda k: display[k].casefold()):
+        actions = buckets["actions"].get(fold, 0.0)
+        etf = buckets["etf"].get(fold, 0.0)
+        crypto = buckets["crypto"].get(fold, 0.0)
+        rows.append({
+            "proprietaire": display[fold],
+            "actions": actions,
+            "etf": etf,
+            "crypto": crypto,
+            "total": actions + etf + crypto,
+        })
     return jsonify(rows)
 
 
