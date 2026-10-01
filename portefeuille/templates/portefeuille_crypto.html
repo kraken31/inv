@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Portefeuille ETF</title>
+  <title>Portefeuille crypto</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body>
   <header class="topbar">
-    <h1>Portefeuille ETF</h1>
+    <h1>Portefeuille crypto</h1>
     <nav class="nav">
       <button id="refresh-pricing" type="button" class="nav-action"
               title="Lance get_pricing.py pour rafraîchir les cours">
@@ -49,7 +49,7 @@
     <section id="list-view">
       <section class="wallet-actions">
         <button id="create-portefeuille" type="button" class="add-action"
-                title="Créer un nouveau portefeuille ETF">Créer</button>
+                title="Créer un nouveau portefeuille crypto">Créer</button>
       </section>
       <table id="portefeuilles-table" class="wallet">
         <thead>
@@ -59,7 +59,6 @@
             <th class="num">Valeur achat</th>
             <th>Date valorisation</th>
             <th class="num">Valorisation</th>
-            <th class="num">Liquidité</th>
             <th class="num">+/- Value</th>
             <th class="num">Perf</th>
           </tr>
@@ -70,12 +69,12 @@
 
     <section id="wallet-view" hidden>
     <p class="view-nav">
-      <a href="{{ url_for('portefeuille_etf_page') }}" class="back-link">← Tous les portefeuilles</a>
+      <a href="{{ url_for('portefeuille_crypto_page') }}" class="back-link">← Tous les portefeuilles</a>
     </p>
     <h2 class="page-subtitle" id="wallet-title"></h2>
 
     <section class="toolbar">
-      <input type="search" id="search" placeholder="Rechercher (nom ou ticker)…" />
+      <input type="search" id="search" placeholder="Rechercher (nom ou symbole)…" />
       <button id="reload" type="button">Actualiser</button>
     </section>
 
@@ -85,7 +84,6 @@
           <th class="num">Valeur achat</th>
           <th>Date valorisation</th>
           <th class="num">Valorisation</th>
-          <th class="num">Liquidité</th>
           <th class="num">+/- Value</th>
           <th class="num">Perf</th>
         </tr>
@@ -95,7 +93,6 @@
           <td class="num" id="s-purchase"></td>
           <td id="s-date"></td>
           <td class="num" id="s-current"></td>
-          <td class="num" id="s-liquidite"></td>
           <td class="num" id="s-plus-minus"></td>
           <td class="num" id="s-perf"></td>
         </tr>
@@ -104,7 +101,7 @@
 
     <section class="wallet-actions">
       <button id="add-action" type="button" class="add-action"
-              title="Ajouter un ETF au portefeuille">+ Ajouter</button>
+              title="Ajouter une crypto au portefeuille">+ Ajouter</button>
     </section>
 
     <table id="wallet-table" class="wallet">
@@ -114,11 +111,10 @@
           <th data-key="name" class="sort">Nom</th>
           <th data-key="quantity" class="sort num">Quantité</th>
           <th data-key="purchase_date" class="sort">Date achat</th>
-          <th data-key="purchase_price" class="sort num">Prix achat</th>
           <th data-key="purchase_amount" class="sort num">Montant achat</th>
           <th data-key="current_date" class="sort">Date</th>
-          <th data-key="current_price" class="sort num">Prix</th>
-          <th data-key="current_amount" class="sort num">Montant</th>
+          <th data-key="current_price" class="sort num">Cours</th>
+          <th data-key="current_amount" class="sort num">Valorisation</th>
           <th data-key="plus_minus_value" class="sort num">+/- Value</th>
           <th data-key="perf" class="sort num">Perf</th>
           <th data-key="rsi" class="sort num">RSI</th>
@@ -132,7 +128,7 @@
 
   <dialog id="delete-dialog" class="modal">
     <form method="dialog" class="modal-form">
-      <h2 class="modal-title">Supprimer cet ETF ?</h2>
+      <h2 class="modal-title">Supprimer cette crypto ?</h2>
       <p class="modal-text" id="delete-message"></p>
       <div class="modal-actions">
         <button type="submit" value="cancel" class="modal-btn">Annuler</button>
@@ -145,34 +141,28 @@
 
   <dialog id="create-dialog" class="modal">
     <form method="dialog" class="modal-form">
-      <h2 class="modal-title">Créer un portefeuille ETF</h2>
+      <h2 class="modal-title">Créer un portefeuille crypto</h2>
       <label class="modal-field">
         <span>Propriétaire</span>
         <input type="text" id="create-proprietaire" maxlength="80" required />
       </label>
       <label class="modal-field">
-        <span>Premier ETF</span>
+        <span>Première crypto</span>
         <select id="create-id" required>
-          <option value="">— Choisir un ETF —</option>
+          <option value="">— Choisir une crypto —</option>
         </select>
       </label>
       <label class="modal-field">
         <span>Quantité</span>
-        <input type="number" id="create-quantity" step="0.0001" min="0.0001" required />
+        <input type="number" id="create-quantity" step="any" min="0.00000001" required />
       </label>
       <label class="modal-field">
         <span>Date d'achat</span>
         <input type="date" id="create-date" required />
       </label>
       <label class="modal-field">
-        <span>Prix d'achat (€)</span>
-        <input
-          type="number"
-          id="create-price"
-          step="0.0001"
-          min="0"
-          required
-        />
+        <span>Montant (€)</span>
+        <input type="number" id="create-amount" step="0.01" min="0" required />
       </label>
       <div class="modal-actions">
         <button type="submit" value="cancel" class="modal-btn">Annuler</button>
@@ -185,30 +175,24 @@
 
   <dialog id="add-dialog" class="modal">
     <form method="dialog" class="modal-form">
-      <h2 class="modal-title">Ajouter un ETF</h2>
+      <h2 class="modal-title">Ajouter une crypto</h2>
       <label class="modal-field">
-        <span>ETF</span>
+        <span>Crypto</span>
         <select id="add-id" required>
-          <option value="">— Choisir un ETF —</option>
+          <option value="">— Choisir une crypto —</option>
         </select>
       </label>
       <label class="modal-field">
         <span>Quantité</span>
-        <input type="number" id="add-quantity" step="0.0001" min="0.0001" required />
+        <input type="number" id="add-quantity" step="any" min="0.00000001" required />
       </label>
       <label class="modal-field">
         <span>Date d'achat</span>
         <input type="date" id="add-date" required />
       </label>
       <label class="modal-field">
-        <span>Prix d'achat (€)</span>
-        <input
-          type="number"
-          id="add-price"
-          step="0.0001"
-          min="0"
-          required
-        />
+        <span>Montant (€)</span>
+        <input type="number" id="add-amount" step="0.01" min="0" required />
       </label>
       <div class="modal-actions">
         <button type="submit" value="cancel" class="modal-btn">Annuler</button>
@@ -224,21 +208,15 @@
       <h2 class="modal-title" id="edit-title">Modifier la ligne</h2>
       <label class="modal-field">
         <span>Quantité</span>
-        <input type="number" id="edit-quantity" step="0.0001" min="0" required />
+        <input type="number" id="edit-quantity" step="any" min="0" required />
       </label>
       <label class="modal-field">
         <span>Date d'achat</span>
         <input type="date" id="edit-date" required />
       </label>
       <label class="modal-field">
-        <span>Prix d'achat (€)</span>
-        <input
-          type="number"
-          id="edit-price"
-          step="0.0001"
-          min="0"
-          required
-        />
+        <span>Montant (€)</span>
+        <input type="number" id="edit-amount" step="0.01" min="0" required />
       </label>
       <div class="modal-actions">
         <button type="submit" value="cancel" class="modal-btn">Annuler</button>
@@ -249,29 +227,7 @@
     </form>
   </dialog>
 
-  <dialog id="liquidite-dialog" class="modal">
-    <form method="dialog" class="modal-form">
-      <h2 class="modal-title">Modifier la liquidité</h2>
-      <label class="modal-field">
-        <span>Nouvelle liquidité (€)</span>
-        <input
-          type="number"
-          id="liquidite-input"
-          step="0.01"
-          min="0"
-          required
-        />
-      </label>
-      <div class="modal-actions">
-        <button type="submit" value="cancel" class="modal-btn">Annuler</button>
-        <button type="submit" value="save" class="modal-btn primary">
-          Enregistrer
-        </button>
-      </div>
-    </form>
-  </dialog>
-
-  <script src="{{ url_for('static', filename='portefeuille_etf.js') }}"></script>
+  <script src="{{ url_for('static', filename='portefeuille_crypto.js') }}"></script>
   <script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>
 </html>

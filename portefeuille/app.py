@@ -97,7 +97,27 @@ _REFRESH_JOBS: dict[str, dict] = {
         "lock": threading.Lock(),
         "state": _new_state(),
     },
+    "pricing_crypto": {
+        "script": SCRIPTS_DIR / "get_pricing_crypto.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
 }
+
+# Référentiel crypto (id, nom, ticker Yahoo en euros). Identique à
+# CRYPTO_CATALOG dans get_pricing_crypto.py.
+CRYPTO_CATALOG = (
+    ("BTC", "Bitcoin", "BTC-EUR"),
+    ("ETH", "Ethereum", "ETH-EUR"),
+    ("SOL", "Solana", "SOL-EUR"),
+    ("XRP", "XRP", "XRP-EUR"),
+    ("ADA", "Cardano", "ADA-EUR"),
+    ("AVAX", "Avalanche", "AVAX-EUR"),
+    ("LINK", "Chainlink", "LINK-EUR"),
+    ("DOT", "Polkadot", "DOT-EUR"),
+    ("DOGE", "Dogecoin", "DOGE-EUR"),
+    ("LTC", "Litecoin", "LTC-EUR"),
+)
 
 
 def get_db() -> sqlite3.Connection:
@@ -217,6 +237,34 @@ def ensure_schema() -> None:
                 "walletETFDetails_proprietaire "
                 "ON walletETFDetails (proprietaire COLLATE NOCASE)"
             )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS crypto ("
+                "id TEXT PRIMARY KEY, name TEXT, yahoo TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS walletCrypto ("
+                "id TEXT, quantity REAL, amount REAL, date TEXT, "
+                "proprietaire TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS pricingCrypto ("
+                "id TEXT, date TEXT, price REAL, rsi REAL)"
+            )
+            pricing_crypto_cols = _table_columns(conn, "pricingCrypto")
+            if pricing_crypto_cols and "rsi" not in pricing_crypto_cols:
+                conn.execute(
+                    "ALTER TABLE pricingCrypto ADD COLUMN rsi REAL"
+                )
+            conn.executemany(
+                "INSERT OR IGNORE INTO crypto (id, name, yahoo) "
+                "VALUES (?, ?, ?)",
+                CRYPTO_CATALOG,
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "walletCrypto_proprietaire_id "
+                "ON walletCrypto (proprietaire COLLATE NOCASE, id)"
+            )
             conn.commit()
         _SCHEMA_READY = True
 
@@ -312,6 +360,46 @@ def parse_position_payload(payload: dict) -> tuple[str, int, float, float, str]:
     return stock_id, quantity, price, dividend, date_str
 
 
+def crypto_owner_exists(conn: sqlite3.Connection, proprietaire: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM walletCrypto
+        WHERE proprietaire = ? COLLATE NOCASE
+        LIMIT 1
+        """,
+        (proprietaire,),
+    ).fetchone()
+    return row is not None
+
+
+def parse_crypto_position_payload(
+    payload: dict,
+) -> tuple[str, float, float, str]:
+    """Extrait id / quantity / amount (euros) / date d'une ligne crypto.
+    Lève ValueError avec un message affichable.
+    """
+    try:
+        crypto_id = str(payload["id"]).strip()
+        quantity = float(payload["quantity"])
+        amount = float(payload["amount"])
+        date_str = str(payload["date"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Champs invalides") from exc
+
+    if not crypto_id:
+        raise ValueError("Crypto requise")
+    if quantity <= 0:
+        raise ValueError("Quantité doit être > 0")
+    if amount < 0:
+        raise ValueError("Valeurs négatives interdites")
+    if not math.isfinite(quantity) or not math.isfinite(amount):
+        raise ValueError("Valeurs non finies")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        raise ValueError("Date invalide (YYYY-MM-DD)")
+    return crypto_id, quantity, amount, date_str
+
+
 def parse_etf_position_payload(payload: dict) -> tuple[str, float, float, str]:
     """Extrait id / quantity / price / date d'une ligne ETF.
     Lève ValueError avec un message affichable.
@@ -357,6 +445,11 @@ def rsi_etf_page():
     return render_template("rsi_etf.html")
 
 
+@app.route("/rsi-crypto")
+def rsi_crypto_page():
+    return render_template("rsi_crypto.html")
+
+
 @app.route("/rendement")
 def rendement_page():
     current_year = date.today().year
@@ -380,6 +473,11 @@ def etf_page():
 @app.route("/portefeuille-etf")
 def portefeuille_etf_page():
     return render_template("portefeuille_etf.html")
+
+
+@app.route("/portefeuille-crypto")
+def portefeuille_crypto_page():
+    return render_template("portefeuille_crypto.html")
 
 
 @app.route("/securite")
@@ -1175,6 +1273,341 @@ def api_wallet_etf_update(etf_id: str):
     return jsonify({"updated": etf_id})
 
 
+@app.route("/api/portefeuilles-crypto")
+def api_portefeuilles_crypto():
+    """Liste les portefeuilles crypto (un par propriétaire) avec une
+    synthèse de valorisation au dernier cours `pricingCrypto`.
+    """
+    query = """
+        WITH latest_price AS (
+            SELECT p.id, p.date, p.price
+            FROM pricingCrypto p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingCrypto
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        ),
+        agg AS (
+            SELECT
+                w.proprietaire,
+                COUNT(*) AS nb_lignes,
+                SUM(w.amount) AS purchase_amount,
+                SUM(COALESCE(w.quantity * lp.price, 0)) AS current_amount,
+                MAX(lp.date) AS current_date
+            FROM walletCrypto w
+            LEFT JOIN latest_price lp ON lp.id = w.id
+            GROUP BY w.proprietaire
+        )
+        SELECT
+            a.proprietaire AS proprietaire,
+            a.nb_lignes AS nb_lignes,
+            COALESCE(a.purchase_amount, 0) AS purchase_amount,
+            COALESCE(a.current_amount, 0) AS current_amount,
+            a.current_date AS current_date,
+            COALESCE(a.current_amount, 0)
+                - COALESCE(a.purchase_amount, 0) AS plus_minus_value,
+            CASE WHEN COALESCE(a.purchase_amount, 0) > 0
+                 THEN 100.0 * (COALESCE(a.current_amount, 0)
+                               - COALESCE(a.purchase_amount, 0))
+                              / a.purchase_amount
+            END AS perf
+        FROM agg a
+        ORDER BY a.proprietaire COLLATE NOCASE
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/portefeuilles-crypto", methods=["POST"])
+def api_portefeuilles_crypto_create():
+    """Crée un portefeuille crypto avec une première position."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        proprietaire = normalize_proprietaire(payload.get("proprietaire"))
+        crypto_id, quantity, amount, date_str = (
+            parse_crypto_position_payload(payload)
+        )
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        with get_db_rw() as conn:
+            if crypto_owner_exists(conn, proprietaire):
+                return (
+                    jsonify({
+                        "error": "Un portefeuille crypto existe déjà "
+                        "pour ce propriétaire",
+                    }),
+                    409,
+                )
+            if not conn.execute(
+                "SELECT 1 FROM crypto WHERE id = ?", (crypto_id,)
+            ).fetchone():
+                return jsonify({"error": "Crypto inconnue"}), 404
+            conn.execute(
+                "INSERT INTO walletCrypto "
+                "(id, quantity, amount, date, proprietaire) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    crypto_id,
+                    quantity,
+                    amount,
+                    iso_to_fr_date(date_str),
+                    proprietaire,
+                ),
+            )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.IntegrityError:
+        return (
+            jsonify({
+                "error": "Un portefeuille crypto existe déjà "
+                "pour ce propriétaire",
+            }),
+            409,
+        )
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"created": proprietaire}), 201
+
+
+@app.route("/api/wallet-crypto")
+def api_wallet_crypto():
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    query = """
+        WITH latest_price AS (
+            SELECT p.id, p.date, p.price, p.rsi
+            FROM pricingCrypto p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingCrypto
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        )
+        SELECT
+            COALESCE(c.name, w.id)     AS name,
+            w.id                       AS id,
+            w.quantity                 AS quantity,
+            w.date                     AS purchase_date,
+            w.amount                   AS purchase_amount,
+            lp.date                    AS current_date,
+            lp.price                   AS current_price,
+            (w.quantity * lp.price)    AS current_amount,
+            lp.rsi                     AS rsi,
+            (w.quantity * lp.price - w.amount)
+                                       AS plus_minus_value,
+            CASE WHEN w.amount > 0
+                 THEN 100.0 * (w.quantity * lp.price - w.amount)
+                            / w.amount
+            END                        AS perf
+        FROM walletCrypto w
+        LEFT JOIN crypto c         ON c.id = w.id
+        LEFT JOIN latest_price lp  ON lp.id = w.id
+        WHERE w.proprietaire = ? COLLATE NOCASE
+        ORDER BY name COLLATE NOCASE
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query, (proprietaire,))]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/cryptos")
+def api_cryptos():
+    """Référentiel crypto, pour le select de création de portefeuille."""
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT id, COALESCE(name, id) AS name
+                    FROM crypto
+                    ORDER BY name COLLATE NOCASE
+                    """
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/cryptos/available")
+def api_cryptos_available():
+    """Cryptos du référentiel absentes du portefeuille demandé."""
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        with get_db() as conn:
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    """
+                    SELECT c.id, COALESCE(c.name, c.id) AS name
+                    FROM crypto c
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM walletCrypto w
+                        WHERE w.id = c.id
+                          AND w.proprietaire = ? COLLATE NOCASE
+                    )
+                    ORDER BY name COLLATE NOCASE
+                    """,
+                    (proprietaire,),
+                )
+            ]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify(rows)
+
+
+@app.route("/api/wallet-crypto", methods=["POST"])
+def api_wallet_crypto_create():
+    """Ajoute une ligne dans `walletCrypto`."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        proprietaire = proprietaire_from_request(payload)
+        crypto_id, quantity, amount, date_str = (
+            parse_crypto_position_payload(payload)
+        )
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        with get_db_rw() as conn:
+            if not crypto_owner_exists(conn, proprietaire):
+                return jsonify({"error": "Portefeuille introuvable"}), 404
+            if not conn.execute(
+                "SELECT 1 FROM crypto WHERE id = ?", (crypto_id,)
+            ).fetchone():
+                return jsonify({"error": "Crypto inconnue"}), 404
+            if conn.execute(
+                "SELECT 1 FROM walletCrypto "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
+                (crypto_id, proprietaire),
+            ).fetchone():
+                return (
+                    jsonify({"error": "Crypto déjà dans le portefeuille"}),
+                    409,
+                )
+            conn.execute(
+                "INSERT INTO walletCrypto "
+                "(id, quantity, amount, date, proprietaire) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    crypto_id,
+                    quantity,
+                    amount,
+                    iso_to_fr_date(date_str),
+                    proprietaire,
+                ),
+            )
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.IntegrityError:
+        return (
+            jsonify({"error": "Crypto déjà dans le portefeuille"}),
+            409,
+        )
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"created": crypto_id}), 201
+
+
+@app.route("/api/wallet-crypto/<crypto_id>", methods=["DELETE"])
+def api_wallet_crypto_delete(crypto_id: str):
+    try:
+        proprietaire = proprietaire_from_request()
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "DELETE FROM walletCrypto "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
+                (crypto_id, proprietaire),
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "Crypto introuvable"}), 404
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"deleted": crypto_id})
+
+
+@app.route("/api/wallet-crypto/<crypto_id>", methods=["PUT"])
+def api_wallet_crypto_update(crypto_id: str):
+    """Met à jour quantity / amount / date. La quantité peut être 0."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        proprietaire = proprietaire_from_request(payload)
+        quantity = float(payload["quantity"])
+        amount = float(payload["amount"])
+        date_str = str(payload["date"])
+    except ProprietaireError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Champs invalides"}), 400
+
+    if quantity < 0 or amount < 0:
+        return jsonify({"error": "Valeurs négatives interdites"}), 400
+    if not math.isfinite(quantity) or not math.isfinite(amount):
+        return jsonify({"error": "Valeurs non finies"}), 400
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        return jsonify({"error": "Date invalide (YYYY-MM-DD)"}), 400
+
+    try:
+        with get_db_rw() as conn:
+            cur = conn.execute(
+                "UPDATE walletCrypto SET quantity = ?, amount = ?, "
+                "date = ? "
+                "WHERE id = ? AND proprietaire = ? COLLATE NOCASE",
+                (
+                    quantity,
+                    amount,
+                    iso_to_fr_date(date_str),
+                    crypto_id,
+                    proprietaire,
+                ),
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "Crypto introuvable"}), 404
+            conn.commit()
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
+    return jsonify({"updated": crypto_id})
+
+
 @app.route("/api/per")
 def api_per():
     query = """
@@ -1309,6 +1742,47 @@ def api_rsi_etf():
         return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
     for row in rows:
         row["pea"] = json_pea(row.get("pea"))
+    return jsonify(rows)
+
+
+@app.route("/api/rsi-crypto")
+def api_rsi_crypto():
+    """Cryptos dont le dernier RSI connu est < 30, dans la même
+    fenêtre de fraîcheur de 7 jours que `/api/rsi-etf`.
+    """
+    query = """
+        WITH latest_pricing AS (
+            SELECT p.id, p.date, p.rsi
+            FROM pricingCrypto p
+            JOIN (
+                SELECT id, MAX(date) AS max_date
+                FROM pricingCrypto
+                WHERE rsi IS NOT NULL
+                GROUP BY id
+            ) m ON m.id = p.id AND m.max_date = p.date
+        ),
+        overall AS (
+            SELECT MAX(date) AS max_date FROM latest_pricing
+        )
+        SELECT
+            COALESCE(c.name, lp.id)   AS name,
+            lp.id                     AS id,
+            lp.date                   AS date,
+            lp.rsi                    AS rsi
+        FROM latest_pricing lp
+        CROSS JOIN overall o
+        LEFT JOIN crypto c ON c.id = lp.id
+        WHERE lp.rsi < 30
+          AND lp.date >= date(o.max_date, '-7 days')
+        ORDER BY lp.rsi ASC
+    """
+    try:
+        with get_db() as conn:
+            rows = [dict(r) for r in conn.execute(query)]
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except sqlite3.Error as exc:
+        return jsonify({"error": f"Erreur SQLite: {exc}"}), 500
     return jsonify(rows)
 
 

@@ -1,0 +1,586 @@
+/**
+ * Portefeuille crypto : quantité + montant en euros, valorisation au
+ * dernier cours `pricingCrypto`. Pas de liquidité ni de fiche détail.
+ */
+const state = {
+  rows: [],
+  filtered: [],
+  sortKey: "name",
+  sortDir: "asc",
+  query: "",
+  proprietaire: null,
+  portfolios: [],
+};
+
+const tbody = document.querySelector("#wallet-table tbody");
+const listTbody = document.querySelector("#portefeuilles-table tbody");
+const listView = document.getElementById("list-view");
+const walletView = document.getElementById("wallet-view");
+const walletTitle = document.getElementById("wallet-title");
+const statusEl = document.getElementById("status");
+const searchEl = document.getElementById("search");
+const reloadEl = document.getElementById("reload");
+
+const nfEur = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 2,
+});
+const nfQty = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 8 });
+const nfPrice = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 4,
+});
+const nfInt = new Intl.NumberFormat("fr-FR");
+const nfPct = new Intl.NumberFormat("fr-FR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const nfRsi = new Intl.NumberFormat("fr-FR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+function fmtRsi(v) {
+  return v == null || Number.isNaN(v) ? "" : nfRsi.format(v);
+}
+
+function rsiClass(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  if (v < 30) return "rsi-low";
+  if (v > 70) return "rsi-high";
+  return "";
+}
+
+function fmtPct(v) {
+  return v == null || Number.isNaN(v) ? "" : `${nfPct.format(v)}\u00A0%`;
+}
+
+function signClass(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  if (v > 0) return "pos";
+  if (v < 0) return "neg";
+  return "";
+}
+
+function setStatus(msg, isError = false) {
+  statusEl.textContent = msg || "";
+  statusEl.classList.toggle("error", !!isError);
+}
+
+function parseDateLike(s) {
+  if (s == null) return null;
+  const str = String(s);
+  let m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  return null;
+}
+
+function compare(a, b, key, dir) {
+  const va = a[key];
+  const vb = b[key];
+  let cmp;
+  if (typeof va === "number" && typeof vb === "number") {
+    cmp = va - vb;
+  } else {
+    const da = parseDateLike(va);
+    const db = parseDateLike(vb);
+    if (da != null && db != null) {
+      cmp = da - db;
+    } else if (da != null) {
+      cmp = -1;
+    } else if (db != null) {
+      cmp = 1;
+    } else {
+      cmp = String(va ?? "").localeCompare(String(vb ?? ""), "fr", {
+        numeric: true,
+        sensitivity: "base",
+      });
+    }
+  }
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function applyFilterSort() {
+  const q = state.query.trim().toLowerCase();
+  state.filtered = state.rows.filter((r) => {
+    if (!q) return true;
+    return (
+      String(r.name || "").toLowerCase().includes(q) ||
+      String(r.id || "").toLowerCase().includes(q)
+    );
+  });
+  state.filtered.sort((a, b) => compare(a, b, state.sortKey, state.sortDir));
+  render();
+}
+
+function renderSummary() {
+  let totalPurchase = 0;
+  let totalCurrent = 0;
+  let maxDate = null;
+
+  for (const r of state.filtered) {
+    totalPurchase += Number(r.purchase_amount) || 0;
+    totalCurrent += Number(r.current_amount) || 0;
+    if (r.current_date && (!maxDate || r.current_date > maxDate)) {
+      maxDate = r.current_date;
+    }
+  }
+
+  const totalPlusMinus = totalCurrent - totalPurchase;
+  const perf = totalPurchase > 0
+    ? (100 * (totalCurrent - totalPurchase)) / totalPurchase
+    : null;
+
+  const set = (id, text, cls = "num") => {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = cls;
+  };
+
+  set("s-purchase", nfEur.format(totalPurchase));
+  document.getElementById("s-date").textContent = formatCurrentDate(maxDate);
+  set("s-current", nfEur.format(totalCurrent));
+  set("s-plus-minus", nfEur.format(totalPlusMinus), `num ${signClass(totalPlusMinus)}`);
+  set("s-perf", fmtPct(perf), `num ${signClass(perf)}`);
+}
+
+function render() {
+  tbody.innerHTML = "";
+  renderSummary();
+  for (const r of state.filtered) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="col-actions">
+        <button type="button" class="row-edit"
+                data-id="${escapeHtml(r.id ?? "")}"
+                data-name="${escapeHtml(r.name ?? "")}"
+                data-quantity="${r.quantity ?? 0}"
+                data-date="${escapeHtml(r.purchase_date ?? "")}"
+                data-amount="${r.purchase_amount ?? 0}"
+                title="Modifier cette ligne"
+                aria-label="Modifier">✎</button>
+        <button type="button" class="row-delete"
+                data-id="${escapeHtml(r.id ?? "")}"
+                data-name="${escapeHtml(r.name ?? "")}"
+                title="Supprimer cette ligne"
+                aria-label="Supprimer">🗑</button>
+      </td>
+      <td>${escapeHtml(r.name)} <span class="isin">${escapeHtml(r.id || "")}</span></td>
+      <td class="num">${nfQty.format(r.quantity ?? 0)}</td>
+      <td>${escapeHtml(r.purchase_date || "")}</td>
+      <td class="num">${nfEur.format(r.purchase_amount ?? 0)}</td>
+      <td>${escapeHtml(formatCurrentDate(r.current_date))}</td>
+      <td class="num">${r.current_price != null ? nfPrice.format(r.current_price) : ""}</td>
+      <td class="num">${r.current_amount != null ? nfEur.format(r.current_amount) : ""}</td>
+      <td class="num ${signClass(r.plus_minus_value)}">${r.plus_minus_value != null ? nfEur.format(r.plus_minus_value) : ""}</td>
+      <td class="num ${signClass(r.perf)}">${fmtPct(r.perf)}</td>
+      <td class="num ${rsiClass(r.rsi)}">${fmtRsi(r.rsi)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  document.querySelectorAll("#wallet-table th.sort").forEach((th) => {
+    th.classList.remove("asc", "desc");
+    if (th.dataset.key === state.sortKey) th.classList.add(state.sortDir);
+  });
+}
+
+function formatCurrentDate(s) {
+  if (!s) return "";
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+
+function toIsoDate(s) {
+  if (!s) return "";
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const m2 = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+  return "";
+}
+
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function ownerParam(name = state.proprietaire) {
+  return `proprietaire=${encodeURIComponent(name)}`;
+}
+
+function selectedOwner() {
+  return new URLSearchParams(window.location.search).get("proprietaire");
+}
+
+function showListView() {
+  listView.hidden = false;
+  walletView.hidden = true;
+  document.title = "Portefeuille crypto";
+}
+
+function showWalletView(owner) {
+  listView.hidden = true;
+  walletView.hidden = false;
+  state.proprietaire = owner;
+  walletTitle.textContent = owner;
+  document.title = `Portefeuille crypto — ${owner}`;
+}
+
+function renderPortfolios() {
+  listTbody.innerHTML = "";
+  if (!state.portfolios.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td class="empty" colspan="7">Aucun portefeuille</td>';
+    listTbody.appendChild(tr);
+    return;
+  }
+  for (const r of state.portfolios) {
+    const tr = document.createElement("tr");
+    tr.classList.add("clickable");
+    const plusMinus = Number(r.plus_minus_value) || 0;
+    tr.innerHTML = `
+      <td>${escapeHtml(r.proprietaire)}</td>
+      <td class="num">${nfInt.format(r.nb_lignes ?? 0)}</td>
+      <td class="num">${nfEur.format(r.purchase_amount ?? 0)}</td>
+      <td>${escapeHtml(formatCurrentDate(r.current_date))}</td>
+      <td class="num">${nfEur.format(r.current_amount ?? 0)}</td>
+      <td class="num ${signClass(plusMinus)}">${nfEur.format(plusMinus)}</td>
+      <td class="num ${signClass(r.perf)}">${fmtPct(r.perf)}</td>
+    `;
+    tr.addEventListener("click", () => {
+      window.location.href =
+        `/portefeuille-crypto?${ownerParam(r.proprietaire)}`;
+    });
+    listTbody.appendChild(tr);
+  }
+}
+
+async function loadPortfolios() {
+  setStatus("Chargement…");
+  try {
+    const resp = await fetch("/api/portefeuilles-crypto");
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    state.portfolios = await resp.json();
+    setStatus("");
+    renderPortfolios();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+}
+
+function fillCryptoSelect(selectEl, cryptos) {
+  const opts = ['<option value="">— Choisir une crypto —</option>'];
+  for (const s of cryptos) {
+    opts.push(
+      `<option value="${escapeHtml(s.id)}">` +
+        `${escapeHtml(s.name)} (${escapeHtml(s.id)})</option>`,
+    );
+  }
+  selectEl.innerHTML = opts.join("");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+}
+
+async function loadData() {
+  setStatus("Chargement…");
+  try {
+    const resp = await fetch(`/api/wallet-crypto?${ownerParam()}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    state.rows = await resp.json();
+    setStatus("");
+    applyFilterSort();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+}
+
+document.querySelectorAll("#wallet-table th.sort").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (state.sortKey === key) {
+      state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+    } else {
+      state.sortKey = key;
+      state.sortDir = "asc";
+    }
+    applyFilterSort();
+  });
+});
+
+searchEl.addEventListener("input", (e) => {
+  state.query = e.target.value;
+  applyFilterSort();
+});
+
+reloadEl.addEventListener("click", loadData);
+
+const deleteDialog = document.getElementById("delete-dialog");
+const deleteMessage = document.getElementById("delete-message");
+let pendingDeleteId = null;
+
+const editDialog = document.getElementById("edit-dialog");
+const editTitle = document.getElementById("edit-title");
+const editQuantity = document.getElementById("edit-quantity");
+const editDate = document.getElementById("edit-date");
+const editAmount = document.getElementById("edit-amount");
+let pendingEditId = null;
+
+tbody.addEventListener("click", (e) => {
+  const delBtn = e.target.closest(".row-delete");
+  if (delBtn) {
+    pendingDeleteId = delBtn.dataset.id;
+    deleteMessage.textContent =
+      `« ${delBtn.dataset.name} » sera supprimé du portefeuille.`;
+    if (typeof deleteDialog.showModal === "function") {
+      deleteDialog.showModal();
+    }
+    return;
+  }
+  const editBtn = e.target.closest(".row-edit");
+  if (editBtn) {
+    pendingEditId = editBtn.dataset.id;
+    editTitle.textContent = `Modifier « ${editBtn.dataset.name} »`;
+    editQuantity.value = editBtn.dataset.quantity;
+    editDate.value = toIsoDate(editBtn.dataset.date);
+    editAmount.value = editBtn.dataset.amount;
+    if (typeof editDialog.showModal === "function") {
+      editDialog.showModal();
+      editQuantity.focus();
+      editQuantity.select();
+    }
+  }
+});
+
+deleteDialog.addEventListener("close", async () => {
+  const id = pendingDeleteId;
+  pendingDeleteId = null;
+  if (deleteDialog.returnValue !== "delete" || !id) return;
+  try {
+    setStatus("Suppression…");
+    const resp = await fetch(
+      `/api/wallet-crypto/${encodeURIComponent(id)}?${ownerParam()}`,
+      { method: "DELETE" },
+    );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    setStatus("");
+    await loadData();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+editDialog.addEventListener("close", async () => {
+  const id = pendingEditId;
+  pendingEditId = null;
+  if (editDialog.returnValue !== "save" || !id) return;
+  const body = {
+    quantity: Number(editQuantity.value),
+    date: editDate.value,
+    amount: Number(editAmount.value),
+    proprietaire: state.proprietaire,
+  };
+  if (
+    !Number.isFinite(body.quantity) ||
+    !Number.isFinite(body.amount) ||
+    !body.date
+  ) {
+    setStatus("Champs invalides", true);
+    return;
+  }
+  try {
+    setStatus("Mise à jour…");
+    const resp = await fetch(
+      `/api/wallet-crypto/${encodeURIComponent(id)}?${ownerParam()}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    setStatus("");
+    await loadData();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+const addBtn = document.getElementById("add-action");
+const addDialog = document.getElementById("add-dialog");
+const addId = document.getElementById("add-id");
+const addQuantity = document.getElementById("add-quantity");
+const addDate = document.getElementById("add-date");
+const addAmount = document.getElementById("add-amount");
+
+addBtn.addEventListener("click", async () => {
+  try {
+    setStatus("Chargement des cryptos disponibles…");
+    const resp = await fetch(`/api/cryptos/available?${ownerParam()}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    fillCryptoSelect(addId, await resp.json());
+    addId.value = "";
+    addQuantity.value = "";
+    addDate.value = todayIso();
+    addAmount.value = "";
+    setStatus("");
+    if (typeof addDialog.showModal === "function") {
+      addDialog.showModal();
+      addId.focus();
+    }
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+addDialog.addEventListener("close", async () => {
+  if (addDialog.returnValue !== "save") return;
+  const body = {
+    id: addId.value,
+    quantity: Number(addQuantity.value),
+    date: addDate.value,
+    amount: Number(addAmount.value),
+    proprietaire: state.proprietaire,
+  };
+  if (
+    !body.id ||
+    !Number.isFinite(body.quantity) ||
+    body.quantity <= 0 ||
+    !Number.isFinite(body.amount) ||
+    body.amount < 0 ||
+    !body.date
+  ) {
+    setStatus("Champs invalides", true);
+    return;
+  }
+  try {
+    setStatus("Ajout…");
+    const resp = await fetch("/api/wallet-crypto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    setStatus("");
+    await loadData();
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+const createBtn = document.getElementById("create-portefeuille");
+const createDialog = document.getElementById("create-dialog");
+const createProprietaire = document.getElementById("create-proprietaire");
+const createId = document.getElementById("create-id");
+const createQuantity = document.getElementById("create-quantity");
+const createDate = document.getElementById("create-date");
+const createAmount = document.getElementById("create-amount");
+
+createBtn.addEventListener("click", async () => {
+  try {
+    setStatus("Chargement des cryptos…");
+    const resp = await fetch("/api/cryptos");
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    fillCryptoSelect(createId, await resp.json());
+    createProprietaire.value = "";
+    createId.value = "";
+    createQuantity.value = "";
+    createDate.value = todayIso();
+    createAmount.value = "";
+    setStatus("");
+    if (typeof createDialog.showModal === "function") {
+      createDialog.showModal();
+      createProprietaire.focus();
+    }
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+createDialog.addEventListener("close", async () => {
+  if (createDialog.returnValue !== "save") return;
+  const body = {
+    proprietaire: createProprietaire.value.trim(),
+    id: createId.value,
+    quantity: Number(createQuantity.value),
+    date: createDate.value,
+    amount: Number(createAmount.value),
+  };
+  if (
+    !body.proprietaire ||
+    !body.id ||
+    !Number.isFinite(body.quantity) ||
+    body.quantity <= 0 ||
+    !Number.isFinite(body.amount) ||
+    body.amount < 0 ||
+    !body.date
+  ) {
+    setStatus("Champs invalides", true);
+    return;
+  }
+  try {
+    setStatus("Création du portefeuille…");
+    const resp = await fetch("/api/portefeuilles-crypto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    window.location.href =
+      `/portefeuille-crypto?${ownerParam(body.proprietaire)}`;
+  } catch (e) {
+    setStatus(`Erreur: ${e.message}`, true);
+  }
+});
+
+async function boot() {
+  const owner = selectedOwner();
+  if (owner) {
+    showWalletView(owner);
+    await loadData();
+  } else {
+    showListView();
+    await loadPortfolios();
+  }
+}
+
+boot();

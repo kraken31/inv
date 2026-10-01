@@ -119,12 +119,13 @@ Sur l’écran Croissance, l’année **n** n’est pas l’année calendaire : 
 
 ## 4. Écrans
 
-Navigation latérale commune, en deux menus :
+Navigation latérale commune, en trois menus :
 
 - **Actions** : Portefeuille, Action, PER, RSI, Rendement, Croissance ;
-- **ETF** : Portefeuille ETF, ETF, RSI.
+- **ETF** : Portefeuille ETF, ETF, RSI ;
+- **Crypto** : Portefeuilles, RSI.
 
-Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats**, **↻ Cours ETF** (voir § 6).
+Barre supérieure commune : boutons **↻ Cours**, **↻ Dividendes**, **↻ Résultats**, **↻ Cours ETF**, **↻ Cours crypto** (voir § 6).
 
 Recherche (sauf fiches Action et ETF) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…` ou `/etf?id=…`).
 
@@ -242,6 +243,35 @@ Même écran que le portefeuille actions, appliqué aux positions `walletETF` :
 
 **Actions** : + Ajouter (ETF absents du portefeuille), modifier quantité / date / prix, supprimer.
 
+### 4.10 Portefeuille crypto (`/portefeuille-crypto`)
+
+Même organisation que le portefeuille ETF (liste par propriétaire, puis détail), sans liquidité.
+
+Une ligne est une crypto du référentiel (`crypto`) : **quantité** achetée et **montant en euros** dépensé, plus la date d’achat.
+
+La valorisation utilise le dernier cours Yahoo en euros (`pricingCrypto`, ticker `XXX-EUR`) :
+
+- valorisation = quantité × cours ;
+- +/- value = valorisation − montant ;
+- perf = +/- value / montant.
+
+**Synthèse** : valeur d’achat, date de valorisation, valorisation, +/- value, perf.
+
+**Actions** : Créer un portefeuille (première crypto), + Ajouter (cryptos absentes du portefeuille), modifier quantité / date / montant, supprimer.
+
+Le tableau de détail affiche aussi le **RSI(14)** du dernier cours (`pricingCrypto.rsi`), coloré comme sur le portefeuille ETF (vert sous 30, rouge au-dessus de 70).
+
+### 4.11 RSI crypto (`/rsi-crypto`)
+
+Screener « survendu » du référentiel crypto, calqué sur `/rsi-etf`.
+
+Cryptos retenues :
+
+- RSI **< 30** ;
+- même fenêtre de fraîcheur de **7 jours**.
+
+Recherche locale sur nom / symbole. Colonnes : nom, RSI. Tri par défaut : RSI croissant. Export CSV.
+
 ---
 
 ## 5. Modèle de données (vue fonctionnelle)
@@ -252,22 +282,25 @@ Base : `inv.db` (surcharge possible via `PORTEFEUILLE_DB`).
 | --- | --- |
 | **stocks** | Référentiel actions : mnémo (`id`), nom, nombre d’actions. |
 | **etf** | Référentiel ETF Paris : mnémo (`id`), ISIN, nom long Yahoo, TER en % (`ter`), catégorie justETF (`category` : Actions, Obligations, etc.), éligibilité PEA justETF (`pea` : 1 / 0 / NULL). |
+| **crypto** | Référentiel crypto : symbole (`id`, ex. BTC), nom, ticker Yahoo en euros (`yahoo`, ex. `BTC-EUR`). |
 | **wallet** | Positions actions : quantité, date d’achat (`JJ/MM/AAAA`), prix, cumul de dividendes. |
 | **walletETF** | Positions ETF : mnémo (`id`), quantité, prix d’achat, date d’achat (`JJ/MM/AAAA`). |
+| **walletCrypto** | Positions crypto : symbole (`id`), quantité, montant en euros (`amount`), date d’achat (`JJ/MM/AAAA`). |
 | **walletDetails** | Une seule ligne : liquidité du portefeuille actions. |
 | **walletETFDetails** | Une seule ligne : liquidité du portefeuille ETF. |
 | **pricing** | Historique quotidien des actions : cours, capitalisation, PER, RSI. Une ligne par (titre, date). |
 | **pricingETF** | Historique quotidien des ETF : cours. Une ligne par (titre, date). |
+| **pricingCrypto** | Historique des cours crypto en euros et RSI(14). Une ligne par (symbole, date). |
 | **dividends** | Dividendes agrégés par année civile (somme Yahoo). |
 | **results** | Résultat net annuel (Yahoo `income_stmt`). |
 
-Les lectures métier se font en **lecture seule**. Les écritures UI concernent `wallet`, `walletDetails`, `walletETF` et `walletETFDetails`. Les tables de marché sont mises à jour par les scripts de refresh.
+Les lectures métier se font en **lecture seule**. Les écritures UI concernent `wallet`, `walletDetails`, `walletETF`, `walletETFDetails` et `walletCrypto`. Les tables de marché sont mises à jour par les scripts de refresh.
 
 ---
 
 ## 6. Mise à jour des données
 
-Trois jobs indépendants, lançables en parallèle depuis n’importe quel écran. Un même job ne peut pas être lancé deux fois à la fois. L’UI affiche l’avancement (`[i/n]`) puis le succès ou l’échec.
+Les jobs sont indépendants et lançables en parallèle depuis n’importe quel écran. Un même job ne peut pas être lancé deux fois à la fois. L’UI affiche l’avancement (`[i/n]`) puis le succès ou l’échec.
 
 | Bouton | Script | Effet |
 | --- | --- | --- |
@@ -275,11 +308,12 @@ Trois jobs indépendants, lançables en parallèle depuis n’importe quel écra
 | ↻ Dividendes | `get_dividends.py` | Historique de dividendes par année. |
 | ↻ Résultats | `get_results.py` | Historique de résultat net par année. |
 | ↻ Cours ETF | `get_pricing_etf.py` | Dernier cours des ETF Paris (`etf` → `pricingETF`). |
+| ↻ Cours crypto | `get_pricing_crypto.py` | Dernier cours en euros et RSI(14) des cryptos (`crypto.yahoo`, ex. `BTC-EUR` → `pricingCrypto`). |
 
 Caractéristiques communes :
 
 - source **Yahoo Finance** (`yfinance`) ;
-- ticker `\<id\>.PA` ;
+- ticker actions et ETF : `\<id\>.PA` ; cryptos : colonne `yahoo` (`BTC-EUR`, …) ;
 - 3 workers, backoff en cas de rate-limit (5 / 15 / 45 s) ;
 - **idempotents** : on écrase seulement les (id, date) ou (id, année) renvoyés ; le reste de l’historique est conservé.
 
@@ -327,6 +361,7 @@ python get_etfs.py        # référentiel ETF Paris (noms Yahoo + TER/catégorie
 python get_etfs.py --justetf  # TER + catégorie + PEA justETF seulement
 python get_pricing.py     # cours / PER / RSI
 python get_pricing_etf.py # cours ETF
+python get_pricing_crypto.py # cours crypto (EUR)
 python get_dividends.py   # dividendes
 python get_results.py     # résultats nets
 ```
