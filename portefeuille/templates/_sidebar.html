@@ -3,6 +3,10 @@
   'index', 'action_page', 'per_page', 'rsi_page',
   'rendement_page', 'securite_page',
 ] %}
+{% set in_actions_us = ep in [
+  'portefeuille_us_page', 'action_us_page', 'per_us_page', 'rsi_us_page',
+  'rendement_us_page', 'securite_us_page',
+] %}
 {% set in_etf = ep in ['portefeuille_etf_page', 'etf_page', 'rsi_etf_page'] %}
 {% set in_crypto = ep in ['portefeuille_crypto_page', 'crypto_page', 'rsi_crypto_page'] %}
 {% set in_synthese = ep == 'synthese_page' %}
@@ -22,6 +26,17 @@
       <a href="{{ url_for('rsi_page') }}"{% if ep == 'rsi_page' %} class="active"{% endif %}>RSI</a>
       <a href="{{ url_for('rendement_page') }}"{% if ep == 'rendement_page' %} class="active"{% endif %}>Rendement</a>
       <a href="{{ url_for('securite_page') }}"{% if ep == 'securite_page' %} class="active"{% endif %}>Croissance</a>
+    </div>
+  </details>
+  <details class="nav-group{% if in_actions_us %} current{% endif %}" open>
+    <summary>Actions US</summary>
+    <div class="nav-sub">
+      <a href="{{ url_for('portefeuille_us_page') }}"{% if ep == 'portefeuille_us_page' %} class="active"{% endif %}>Portefeuilles</a>
+      <a href="{{ url_for('action_us_page') }}"{% if ep == 'action_us_page' %} class="active"{% endif %}>Action</a>
+      <a href="{{ url_for('per_us_page') }}"{% if ep == 'per_us_page' %} class="active"{% endif %}>PER</a>
+      <a href="{{ url_for('rsi_us_page') }}"{% if ep == 'rsi_us_page' %} class="active"{% endif %}>RSI</a>
+      <a href="{{ url_for('rendement_us_page') }}"{% if ep == 'rendement_us_page' %} class="active"{% endif %}>Rendement</a>
+      <a href="{{ url_for('securite_us_page') }}"{% if ep == 'securite_us_page' %} class="active"{% endif %}>Croissance</a>
     </div>
   </details>
   <details class="nav-group{% if in_etf %} current{% endif %}" open>

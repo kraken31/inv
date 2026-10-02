@@ -31,9 +31,11 @@ html, body {
 
 .topbar {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 24px 32px 8px;
+  gap: 14px 24px;
+  padding: 20px 32px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -56,8 +58,40 @@ html, body {
 .nav {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 14px 18px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.refresh-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.refresh-label {
+  padding-left: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.refresh-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.refresh-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 0;
 }
 
 .layout {
@@ -148,15 +182,22 @@ html, body {
 }
 
 .nav-action {
-  padding: 8px 14px;
+  padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+}
+
+.nav-action-primary {
+  color: var(--text);
+  border-color: #2a4068;
 }
 
 .nav-action:hover:not(:disabled) {
@@ -175,14 +216,23 @@ html, body {
 }
 
 .nav-status {
-  align-self: center;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.2;
   color: var(--muted);
-  min-width: 10ch;
-  max-width: 32ch;
+  max-width: 12ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
+}
+
+.nav-status:empty {
+  display: none;
+}
+
+.refresh-item-wide .nav-status {
+  max-width: 28ch;
+  text-align: left;
 }
 
 .nav-status.success { color: var(--pos); }

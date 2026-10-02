@@ -105,15 +105,19 @@ function setupRefreshButton(buttonId, statusId, job) {
 
 const pricingControls = [
   setupRefreshButton("refresh-pricing", "refresh-pricing-status", "pricing"),
+  setupRefreshButton("refresh-pricing-us", "refresh-pricing-us-status", "pricing_us"),
   setupRefreshButton("refresh-pricing-etf", "refresh-pricing-etf-status", "pricing_etf"),
   setupRefreshButton("refresh-pricing-crypto", "refresh-pricing-crypto-status", "pricing_crypto"),
 ].filter(Boolean);
 
 setupRefreshButton("refresh-dividends", "refresh-dividends-status", "dividends");
 setupRefreshButton("refresh-results", "refresh-results-status", "results");
+setupRefreshButton("refresh-dividends-us", "refresh-dividends-us-status", "dividends_us");
+setupRefreshButton("refresh-results-us", "refresh-results-us-status", "results_us");
 
 const PRICING_LABELS = {
   pricing: "Actions",
+  pricing_us: "Actions US",
   pricing_etf: "ETF",
   pricing_crypto: "Crypto",
 };

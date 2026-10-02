@@ -102,6 +102,21 @@ _REFRESH_JOBS: dict[str, dict] = {
         "lock": threading.Lock(),
         "state": _new_state(),
     },
+    "pricing_us": {
+        "script": SCRIPTS_DIR / "get_pricing_us.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
+    "dividends_us": {
+        "script": SCRIPTS_DIR / "get_dividends_us.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
+    "results_us": {
+        "script": SCRIPTS_DIR / "get_results_us.py",
+        "lock": threading.Lock(),
+        "state": _new_state(),
+    },
 }
 
 # Référentiel crypto (id, nom, ticker Yahoo en euros). Identique à
@@ -264,6 +279,42 @@ def ensure_schema() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS "
                 "walletCrypto_proprietaire_id "
                 "ON walletCrypto (proprietaire COLLATE NOCASE, id)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS stocksUS ("
+                "id TEXT PRIMARY KEY, name TEXT, quantity INTEGER)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS pricingUS ("
+                "id TEXT, date TEXT, price REAL, "
+                "capitalisation REAL, per REAL, rsi REAL)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS dividendsUS ("
+                "id TEXT, year INTEGER, dividend REAL)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS resultsUS ("
+                "id TEXT, year INTEGER, result INTEGER)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS walletUS ("
+                "id TEXT, quantity INTEGER, price REAL, date TEXT, "
+                "dividend REAL, proprietaire TEXT NOT NULL)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS walletUSDetails ("
+                "liquidite REAL, proprietaire TEXT NOT NULL)"
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "walletUS_proprietaire_id "
+                "ON walletUS (proprietaire COLLATE NOCASE, id)"
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "walletUSDetails_proprietaire "
+                "ON walletUSDetails (proprietaire COLLATE NOCASE)"
             )
             conn.commit()
         _SCHEMA_READY = True
@@ -488,6 +539,101 @@ def portefeuille_crypto_page():
 @app.route("/synthese")
 def synthese_page():
     return render_template("synthese.html")
+
+
+def _us_page_context(**extra):
+    """Contexte Jinja commun aux écrans Actions US."""
+    return {
+        "market": "us",
+        "id_label": "ticker",
+        "currency_symbol": "$",
+        "portfolio_href": "/portefeuille-us",
+        **extra,
+    }
+
+
+def _securite_year(conn: sqlite3.Connection, table: str) -> int:
+    row = conn.execute(
+        f"""
+        SELECT MAX(year) AS n FROM (
+            SELECT year
+            FROM {table}
+            WHERE year IS NOT NULL
+            GROUP BY year
+            HAVING COUNT(*) >= ?
+        )
+        """,
+        (SECURITE_YEAR_MIN_COVERAGE,),
+    ).fetchone()
+    if row and row["n"] is not None:
+        return row["n"]
+    return date.today().year - 1
+
+
+@app.route("/portefeuille-us")
+def portefeuille_us_page():
+    return render_template(
+        "index.html",
+        page_title="Actions US",
+        **_us_page_context(),
+    )
+
+
+@app.route("/action-us")
+def action_us_page():
+    return render_template(
+        "action.html",
+        page_title="Action US",
+        **_us_page_context(),
+    )
+
+
+@app.route("/per-us")
+def per_us_page():
+    return render_template(
+        "per.html",
+        page_title="PER US",
+        **_us_page_context(),
+    )
+
+
+@app.route("/rsi-us")
+def rsi_us_page():
+    return render_template(
+        "rsi.html",
+        page_title="RSI US",
+        **_us_page_context(),
+    )
+
+
+@app.route("/rendement-us")
+def rendement_us_page():
+    current_year = date.today().year
+    return render_template(
+        "rendement.html",
+        year=current_year,
+        year_prev=current_year - 1,
+        page_title="Rendement US",
+        **_us_page_context(),
+    )
+
+
+@app.route("/securite-us")
+def securite_us_page():
+    try:
+        with get_db() as conn:
+            year_n = _securite_year(conn, "resultsUS")
+    except (FileNotFoundError, sqlite3.Error):
+        year_n = date.today().year - 1
+    return render_template(
+        "securite.html",
+        year_n=year_n,
+        year_n1=year_n - 1,
+        year_n2=year_n - 2,
+        year_n3=year_n - 3,
+        page_title="Croissance US",
+        **_us_page_context(),
+    )
 
 
 @app.route("/securite")
@@ -2682,6 +2828,11 @@ def api_refresh_start(job: str):
         state["log_path"] = log_path
 
         return jsonify(_job_status_dict(job)), 202
+
+
+import us_api
+
+us_api.register(app)
 
 
 if __name__ == "__main__":

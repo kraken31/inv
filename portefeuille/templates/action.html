@@ -3,44 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Action</title>
+  <title>{{ page_title|default('Action') }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
-<body>
+<body data-market="{{ market|default('fr') }}">
   <header class="topbar">
-    <h1>Action</h1>
-    <nav class="nav">
-      <button id="refresh-pricing-all" type="button" class="nav-action"
-              title="Lance les cours actions, ETF et crypto">
-        ↻ Tous les cours
-      </button>
-      <span id="refresh-pricing-all-status" class="nav-status"></span>
-      <button id="refresh-pricing" type="button" class="nav-action"
-              title="Lance get_pricing.py pour rafraîchir les cours des actions">
-        ↻ Cours action
-      </button>
-      <span id="refresh-pricing-status" class="nav-status"></span>
-      <button id="refresh-pricing-etf" type="button" class="nav-action"
-              title="Lance get_pricing_etf.py pour rafraîchir les cours ETF">
-        ↻ Cours ETF
-      </button>
-      <span id="refresh-pricing-etf-status" class="nav-status"></span>
-      <button id="refresh-pricing-crypto" type="button" class="nav-action"
-              title="Lance get_pricing_crypto.py pour rafraîchir les cours crypto">
-        ↻ Cours crypto
-      </button>
-      <span id="refresh-pricing-crypto-status" class="nav-status"></span>
-      <button id="refresh-dividends" type="button" class="nav-action"
-              title="Lance get_dividends.py pour rafraîchir les dividendes">
-        ↻ Dividendes
-      </button>
-      <span id="refresh-dividends-status" class="nav-status"></span>
-      <button id="refresh-results" type="button" class="nav-action"
-              title="Lance get_results.py pour rafraîchir les résultats">
-        ↻ Résultats
-      </button>
-      <span id="refresh-results-status" class="nav-status"></span>
-    </nav>
+    <h1>{{ page_title|default('Action') }}</h1>
+    {% include "_refresh_nav.html" %}
   </header>
 
   <div class="layout">
@@ -52,7 +21,7 @@
     <section class="toolbar">
       <div class="autocomplete">
         <input type="search" id="action-search"
-               placeholder="Rechercher une action (nom ou ISIN)…"
+               placeholder="Rechercher une action (nom ou {{ id_label|default('ISIN') }})…"
                autocomplete="off" />
         <ul id="action-suggestions" class="autocomplete-list" hidden></ul>
       </div>

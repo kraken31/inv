@@ -7,6 +7,9 @@
  * L'action courante est reflétée dans l'URL (`/action?id=<ISIN>`) pour
  * pouvoir bookmarker / recharger la page sur la même action.
  */
+const MARKET = document.body.dataset.market === "us" ? "us" : "fr";
+const API = MARKET === "us" ? "/api/us" : "/api";
+
 const searchEl = document.getElementById("action-search");
 const suggestEl = document.getElementById("action-suggestions");
 const statusEl = document.getElementById("status");
@@ -95,7 +98,7 @@ async function runSearch(q) {
   }
   try {
     const resp = await fetch(
-      `/api/action/search?q=${encodeURIComponent(q)}`,
+      `${API}/action/search?q=${encodeURIComponent(q)}`,
     );
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -148,7 +151,7 @@ async function loadDetail(id) {
   setStatus("Chargement…");
   detailEl.hidden = true;
   try {
-    const resp = await fetch(`/api/action/${encodeURIComponent(id)}`);
+    const resp = await fetch(`${API}/action/${encodeURIComponent(id)}`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);

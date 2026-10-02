@@ -3,44 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Investissements</title>
+  <title>{{ page_title|default('Investissements') }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
-<body>
+<body data-market="{{ market|default('fr') }}" data-title="{{ page_title|default('Investissements') }}">
   <header class="topbar">
-    <h1>Investissements</h1>
-    <nav class="nav">
-      <button id="refresh-pricing-all" type="button" class="nav-action"
-              title="Lance les cours actions, ETF et crypto">
-        ↻ Tous les cours
-      </button>
-      <span id="refresh-pricing-all-status" class="nav-status"></span>
-      <button id="refresh-pricing" type="button" class="nav-action"
-              title="Lance get_pricing.py pour rafraîchir les cours des actions">
-        ↻ Cours action
-      </button>
-      <span id="refresh-pricing-status" class="nav-status"></span>
-      <button id="refresh-pricing-etf" type="button" class="nav-action"
-              title="Lance get_pricing_etf.py pour rafraîchir les cours ETF">
-        ↻ Cours ETF
-      </button>
-      <span id="refresh-pricing-etf-status" class="nav-status"></span>
-      <button id="refresh-pricing-crypto" type="button" class="nav-action"
-              title="Lance get_pricing_crypto.py pour rafraîchir les cours crypto">
-        ↻ Cours crypto
-      </button>
-      <span id="refresh-pricing-crypto-status" class="nav-status"></span>
-      <button id="refresh-dividends" type="button" class="nav-action"
-              title="Lance get_dividends.py pour rafraîchir les dividendes">
-        ↻ Dividendes
-      </button>
-      <span id="refresh-dividends-status" class="nav-status"></span>
-      <button id="refresh-results" type="button" class="nav-action"
-              title="Lance get_results.py pour rafraîchir les résultats">
-        ↻ Résultats
-      </button>
-      <span id="refresh-results-status" class="nav-status"></span>
-    </nav>
+    <h1>{{ page_title|default('Investissements') }}</h1>
+    {% include "_refresh_nav.html" %}
   </header>
 
   <div class="layout">
@@ -76,12 +45,12 @@
 
     <section id="wallet-view" hidden>
     <p class="view-nav">
-      <a href="/" class="back-link">← Tous les portefeuilles</a>
+      <a href="{{ portfolio_href|default('/') }}" class="back-link">← Tous les portefeuilles</a>
     </p>
     <h2 class="page-subtitle" id="wallet-title"></h2>
 
     <section class="toolbar">
-      <input type="search" id="search" placeholder="Rechercher (nom ou ISIN)…" />
+      <input type="search" id="search" placeholder="Rechercher (nom ou {{ id_label|default('ISIN') }})…" />
       <button id="reload" type="button">Actualiser</button>
     </section>
 
@@ -176,7 +145,7 @@
         <input type="date" id="create-date" required />
       </label>
       <label class="modal-field">
-        <span>Prix d'achat (€)</span>
+        <span>Prix d'achat ({{ currency_symbol|default('€') }})</span>
         <input
           type="number"
           id="create-price"
@@ -186,7 +155,7 @@
         />
       </label>
       <label class="modal-field">
-        <span>Dividende (€)</span>
+        <span>Dividende ({{ currency_symbol|default('€') }})</span>
         <input
           type="number"
           id="create-dividend"
@@ -223,7 +192,7 @@
         <input type="date" id="add-date" required />
       </label>
       <label class="modal-field">
-        <span>Prix d'achat (€)</span>
+        <span>Prix d'achat ({{ currency_symbol|default('€') }})</span>
         <input
           type="number"
           id="add-price"
@@ -233,7 +202,7 @@
         />
       </label>
       <label class="modal-field">
-        <span>Dividende (€)</span>
+        <span>Dividende ({{ currency_symbol|default('€') }})</span>
         <input
           type="number"
           id="add-dividend"
@@ -264,7 +233,7 @@
         <input type="date" id="edit-date" required />
       </label>
       <label class="modal-field">
-        <span>Prix d'achat (€)</span>
+        <span>Prix d'achat ({{ currency_symbol|default('€') }})</span>
         <input
           type="number"
           id="edit-price"
@@ -274,7 +243,7 @@
         />
       </label>
       <label class="modal-field">
-        <span>Dividende (€)</span>
+        <span>Dividende ({{ currency_symbol|default('€') }})</span>
         <input
           type="number"
           id="edit-dividend"
@@ -296,7 +265,7 @@
     <form method="dialog" class="modal-form">
       <h2 class="modal-title">Modifier la liquidité</h2>
       <label class="modal-field">
-        <span>Nouvelle liquidité (€)</span>
+        <span>Nouvelle liquidité ({{ currency_symbol|default('€') }})</span>
         <input
           type="number"
           id="liquidite-input"

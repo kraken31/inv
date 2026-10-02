@@ -1,3 +1,7 @@
+const MARKET = document.body.dataset.market === "us" ? "us" : "fr";
+const API = MARKET === "us" ? "/api/us" : "/api";
+const ACTION_PAGE = MARKET === "us" ? "/action-us" : "/action";
+
 const state = {
   rows: [],
   filtered: [],
@@ -106,7 +110,7 @@ function render() {
     const tr = document.createElement("tr");
     tr.classList.add(growthClass(r));
     tr.innerHTML = `
-      <td><a class="action-link" href="/action?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
+      <td><a class="action-link" href="${ACTION_PAGE}?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
       <td class="num">${formatResult(r.result_n3)}</td>
       <td class="num">${formatResult(r.result_n2)}</td>
       <td class="num">${formatResult(r.result_n1)}</td>
@@ -125,7 +129,7 @@ function render() {
 async function loadData() {
   setStatus("Chargement…");
   try {
-    const resp = await fetch("/api/securite");
+    const resp = await fetch(`${API}/securite`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);

@@ -18,9 +18,14 @@ const statusEl = document.getElementById("status");
 const searchEl = document.getElementById("search");
 const reloadEl = document.getElementById("reload");
 
+const MARKET = document.body.dataset.market === "us" ? "us" : "fr";
+const API = MARKET === "us" ? "/api/us" : "/api";
+const ACTION_PAGE = MARKET === "us" ? "/action-us" : "/action";
+const PORTFOLIO_PAGE = MARKET === "us" ? "/portefeuille-us" : "/";
+
 const nfEur = new Intl.NumberFormat("fr-FR", {
   style: "currency",
-  currency: "EUR",
+  currency: MARKET === "us" ? "USD" : "EUR",
   maximumFractionDigits: 2,
 });
 const nfNum = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
@@ -181,7 +186,7 @@ function render() {
                 title="Supprimer cette ligne"
                 aria-label="Supprimer">🗑</button>
       </td>
-      <td><a class="action-link" href="/action?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
+      <td><a class="action-link" href="${ACTION_PAGE}?id=${encodeURIComponent(r.id ?? "")}">${escapeHtml(r.name)}</a></td>
       <td class="num">${nfInt.format(r.quantity ?? 0)}</td>
       <td>${escapeHtml(r.purchase_date || "")}</td>
       <td class="num">${nfNum.format(r.purchase_price ?? 0)}</td>
@@ -239,7 +244,7 @@ function selectedOwner() {
 function showListView() {
   listView.hidden = false;
   walletView.hidden = true;
-  document.title = "Investissements";
+  document.title = document.body.dataset.title || "Investissements";
 }
 
 function showWalletView(owner) {
@@ -247,7 +252,8 @@ function showWalletView(owner) {
   walletView.hidden = false;
   state.proprietaire = owner;
   walletTitle.textContent = owner;
-  document.title = `Investissements — ${owner}`;
+  const baseTitle = document.body.dataset.title || "Investissements";
+  document.title = `${baseTitle} — ${owner}`;
 }
 
 function renderPortfolios() {
@@ -276,7 +282,7 @@ function renderPortfolios() {
     `;
     tr.addEventListener("click", () => {
       window.location.href =
-        `/?${ownerParam(r.proprietaire)}`;
+        `${PORTFOLIO_PAGE}?${ownerParam(r.proprietaire)}`;
     });
     listTbody.appendChild(tr);
   }
@@ -285,7 +291,7 @@ function renderPortfolios() {
 async function loadPortfolios() {
   setStatus("Chargement…");
   try {
-    const resp = await fetch("/api/portefeuilles");
+    const resp = await fetch(`${API}/portefeuilles`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
@@ -335,8 +341,8 @@ async function loadData() {
   try {
     const q = ownerParam();
     const [walletResp, liquiditeResp] = await Promise.all([
-      fetch(`/api/wallet?${q}`),
-      fetch(`/api/liquidite?${q}`),
+      fetch(`${API}/wallet?${q}`),
+      fetch(`${API}/liquidite?${q}`),
     ]);
     if (!walletResp.ok) {
       const err = await walletResp.json().catch(() => ({}));
@@ -398,7 +404,7 @@ liquiditeDialog.addEventListener("close", async () => {
   }
   try {
     setStatus("Mise à jour de la liquidité…");
-    const resp = await fetch("/api/liquidite", {
+    const resp = await fetch(`${API}/liquidite`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -465,7 +471,7 @@ deleteDialog.addEventListener("close", async () => {
   try {
     setStatus("Suppression…");
     const resp = await fetch(
-      `/api/wallet/${encodeURIComponent(id)}?${ownerParam()}`,
+      `${API}/wallet/${encodeURIComponent(id)}?${ownerParam()}`,
       { method: "DELETE" },
     );
     if (!resp.ok) {
@@ -502,7 +508,7 @@ editDialog.addEventListener("close", async () => {
   try {
     setStatus("Mise à jour…");
     const resp = await fetch(
-      `/api/wallet/${encodeURIComponent(id)}?${ownerParam()}`,
+      `${API}/wallet/${encodeURIComponent(id)}?${ownerParam()}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -531,7 +537,7 @@ const addDividend = document.getElementById("add-dividend");
 addBtn.addEventListener("click", async () => {
   try {
     setStatus("Chargement des actions disponibles…");
-    const resp = await fetch(`/api/stocks/available?${ownerParam()}`);
+    const resp = await fetch(`${API}/stocks/available?${ownerParam()}`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
@@ -576,7 +582,7 @@ addDialog.addEventListener("close", async () => {
   }
   try {
     setStatus("Ajout…");
-    const resp = await fetch("/api/wallet", {
+    const resp = await fetch(`${API}/wallet`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -604,7 +610,7 @@ const createDividend = document.getElementById("create-dividend");
 createBtn.addEventListener("click", async () => {
   try {
     setStatus("Chargement des actions…");
-    const resp = await fetch("/api/stocks");
+    const resp = await fetch(`${API}/stocks`);
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
@@ -651,7 +657,7 @@ createDialog.addEventListener("close", async () => {
   }
   try {
     setStatus("Création du portefeuille…");
-    const resp = await fetch("/api/portefeuilles", {
+    const resp = await fetch(`${API}/portefeuilles`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -660,7 +666,7 @@ createDialog.addEventListener("close", async () => {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
     }
-    window.location.href = `/?${ownerParam(body.proprietaire)}`;
+    window.location.href = `${PORTFOLIO_PAGE}?${ownerParam(body.proprietaire)}`;
   } catch (e) {
     setStatus(`Erreur: ${e.message}`, true);
   }

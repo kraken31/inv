@@ -22,7 +22,7 @@ L’interface web est une application Flask locale (`portefeuille/`), branchée 
 
 Hors périmètre actuel :
 
-- autres places (Amsterdam, Bruxelles, US, ETF hors listing actions) ;
+- autres places que Paris et le S&P 500 (Amsterdam, Bruxelles, ETF hors listing actions) ;
 - ordre de bourse, courtier, fiscalité ;
 - multi-utilisateurs / authentification (usage local).
 
@@ -123,10 +123,11 @@ Navigation latérale commune, en quatre menus :
 
 - **Synthèse** : Répartition ;
 - **Actions** : Portefeuille, Action, PER, RSI, Rendement, Croissance ;
+- **Actions US** : mêmes écrans pour les composants du S&P 500 (montants en dollars) ;
 - **ETF** : Portefeuille ETF, ETF, RSI ;
 - **Crypto** : Portefeuilles, Crypto, RSI.
 
-Barre supérieure commune : boutons **↻ Tous les cours**, **↻ Cours action**, **↻ Cours ETF**, **↻ Cours crypto**, **↻ Dividendes**, **↻ Résultats** (voir § 6).
+Barre supérieure commune, regroupée par marché (Tout, Paris, US, ETF, Crypto) : **↻ Tous les cours**, puis Cours, Dividendes et Résultats (voir § 6).
 
 Recherche (sauf fiches Action, ETF et Crypto) : filtre local sur **nom ou mnémo**. Les tableaux sont triables. Le nom d’un titre mène à sa fiche (`/action?id=…`, `/etf?id=…` ou `/crypto?id=…`).
 
@@ -322,10 +323,13 @@ Les jobs sont indépendants et lançables en parallèle depuis n’importe quel 
 
 | Bouton | Script | Effet |
 | --- | --- | --- |
-| ↻ Tous les cours | `get_pricing.py`, `get_pricing_etf.py`, `get_pricing_crypto.py` | Lance les trois téléchargements de cours en parallèle. Le statut résume l’avancement de chacun. |
-| ↻ Cours action | `get_pricing.py` | Dernier cours, capitalisation, PER, RSI pour **tous** les titres du référentiel actions. |
-| ↻ Dividendes | `get_dividends.py` | Historique de dividendes par année. |
-| ↻ Résultats | `get_results.py` | Historique de résultat net par année. |
+| ↻ Tous les cours | `get_pricing.py`, `get_pricing_us.py`, `get_pricing_etf.py`, `get_pricing_crypto.py` | Lance les téléchargements de cours en parallèle. Le statut résume l’avancement de chacun. |
+| ↻ Cours Paris | `get_pricing.py` | Dernier cours, capitalisation, PER, RSI pour **tous** les titres du référentiel actions. |
+| ↻ Cours US | `get_pricing_us.py` | Idem pour le S&P 500 (`stocksUS` → `pricingUS`). |
+| ↻ Dividendes US | `get_dividends_us.py` | Historique de dividendes du S&P 500, en dollars. |
+| ↻ Résultats US | `get_results_us.py` | Historique de résultat net du S&P 500, en dollars. |
+| ↻ Dividendes Paris | `get_dividends.py` | Historique de dividendes par année. |
+| ↻ Résultats Paris | `get_results.py` | Historique de résultat net par année. |
 | ↻ Cours ETF | `get_pricing_etf.py` | Dernier cours des ETF Paris (`etf` → `pricingETF`). |
 | ↻ Cours crypto | `get_pricing_crypto.py` | Dernier cours en euros et RSI(14) des cryptos (`crypto.yahoo`, ex. `BTC-EUR` → `pricingCrypto`). |
 
@@ -342,7 +346,7 @@ Les référentiels `get_stocks.py` et `get_etfs.py` ne sont **pas** exposés dan
 
 ## 7. Parcours utilisateur types
 
-1. **Tenir le portefeuille** — Ajouter / modifier une ligne, saisir la liquidité, lancer ↻ Cours action (ou ↻ Tous les cours), relire synthèse et +/- value.
+1. **Tenir le portefeuille** — Ajouter / modifier une ligne, saisir la liquidité, lancer ↻ Cours Paris (ou ↻ Tous les cours), relire synthèse et +/- value.
 2. **Chercher une idée d’achat** — PER (pas cher) ∩ RSI (survendu) ∩ Croissance (bénéfices croissants), puis ouvrir la fiche Action.
 3. **Comparer les rendements** — écran Rendement, tri 5 ans, croiser avec le PER coloré.
 4. **Analyser un titre** — fiche Action depuis n’importe quel tableau, ou recherche directe.
@@ -351,7 +355,7 @@ Les référentiels `get_stocks.py` et `get_etfs.py` ne sont **pas** exposés dan
 
 ## 8. Contraintes et limites fonctionnelles
 
-- **Marché unique** : Paris uniquement ; le suffixe `.PA` est imposé partout.
+- **Deux marchés actions** : Paris (suffixe `.PA`) et S&P 500 (ticker Yahoo sans suffixe, classes en tiret : `BRK-B`). Les tables US sont séparées pour ne pas mélanger euros et dollars.
 - **Pas de lots multiples** : une position = un titre.
 - **Dividendes du portefeuille** : saisie manuelle (cumul), distincte de l’historique Yahoo utilisé pour le screening.
 - **Cours différés** : clôture Yahoo, pas le carnet d’ordres Euronext.
@@ -376,6 +380,10 @@ Scripts de données (venv activé, à la racine du projet) :
 
 ```bash
 python get_stocks.py      # référentiel Euronext Paris
+python get_stocks_us.py   # référentiel S&P 500
+python get_pricing_us.py  # cours / PER / RSI S&P 500
+python get_dividends_us.py
+python get_results_us.py
 python get_etfs.py        # référentiel ETF Paris (noms Yahoo + TER/catégorie/PEA justETF)
 python get_etfs.py --justetf  # TER + catégorie + PEA justETF seulement
 python get_pricing.py     # cours / PER / RSI
