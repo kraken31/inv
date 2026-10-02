@@ -103,31 +103,57 @@ function setupRefreshButton(buttonId, statusId, job) {
   return { job, url, applyState, fetchStatus };
 }
 
-const pricingControls = [
-  setupRefreshButton("refresh-pricing", "refresh-pricing-status", "pricing"),
-  setupRefreshButton("refresh-pricing-us", "refresh-pricing-us-status", "pricing_us"),
-  setupRefreshButton("refresh-pricing-etf", "refresh-pricing-etf-status", "pricing_etf"),
-  setupRefreshButton("refresh-pricing-crypto", "refresh-pricing-crypto-status", "pricing_crypto"),
-].filter(Boolean);
+function trackRefresh(buttonId, statusId, job) {
+  return setupRefreshButton(buttonId, statusId, job);
+}
 
-setupRefreshButton("refresh-dividends", "refresh-dividends-status", "dividends");
-setupRefreshButton("refresh-results", "refresh-results-status", "results");
-setupRefreshButton("refresh-dividends-us", "refresh-dividends-us-status", "dividends_us");
-setupRefreshButton("refresh-results-us", "refresh-results-us-status", "results_us");
+const byJob = {};
+for (const ctrl of [
+  trackRefresh("refresh-pricing", "refresh-pricing-status", "pricing"),
+  trackRefresh("refresh-pricing-us", "refresh-pricing-us-status", "pricing_us"),
+  trackRefresh("refresh-pricing-etf", "refresh-pricing-etf-status", "pricing_etf"),
+  trackRefresh("refresh-pricing-crypto", "refresh-pricing-crypto-status", "pricing_crypto"),
+  trackRefresh("refresh-dividends", "refresh-dividends-status", "dividends"),
+  trackRefresh("refresh-results", "refresh-results-status", "results"),
+  trackRefresh("refresh-dividends-us", "refresh-dividends-us-status", "dividends_us"),
+  trackRefresh("refresh-results-us", "refresh-results-us-status", "results_us"),
+]) {
+  if (ctrl) byJob[ctrl.job] = ctrl;
+}
 
-const PRICING_LABELS = {
-  pricing: "Actions",
-  pricing_us: "Actions US",
-  pricing_etf: "ETF",
-  pricing_crypto: "Crypto",
+// Les cours Paris et US partent après les résultats du même marché,
+// pour que le PER soit calculé avec les comptes juste téléchargés.
+const COURS_APRES_RESULTATS = {
+  results: "pricing",
+  results_us: "pricing_us",
 };
 
-function setupRefreshAllButton(controls) {
+const PRICING_LABELS = {
+  pricing: "Cours Paris",
+  pricing_us: "Cours US",
+  pricing_etf: "ETF",
+  pricing_crypto: "Crypto",
+  dividends: "Div. Paris",
+  results: "Rés. Paris",
+  dividends_us: "Div. US",
+  results_us: "Rés. US",
+};
+
+function setupRefreshAllButton(jobs, coursApresResultats) {
   const button = document.getElementById("refresh-pricing-all");
   const status = document.getElementById("refresh-pricing-all-status");
+  const controls = jobs.map((job) => byJob[job]).filter(Boolean);
   if (!button || !status || controls.length === 0) return;
 
+  const deferredJobs = new Set(Object.values(coursApresResultats));
+  const immediate = controls.filter((ctrl) => !deferredJobs.has(ctrl.job));
+
   let pollTimer = null;
+  let polling = false;
+  let armed = false;
+  const seenRunning = new Set();
+  const startFailed = new Set();
+  const coursLaunched = new Set();
 
   function setStatus(text, cls = "") {
     status.textContent = text;
@@ -146,12 +172,19 @@ function setupRefreshAllButton(controls) {
     return `${name}…`;
   }
 
+  function coursStillPending() {
+    return Object.values(coursApresResultats).some((job) => !coursLaunched.has(job));
+  }
+
   function applySummary(states) {
-    const running = states.some((s) => s.running);
+    const waitingCours = armed && coursStillPending();
+    const running = states.some((s) => s.running) || waitingCours;
     if (running) {
       button.disabled = true;
       button.classList.add("running");
-      setStatus(states.map(progressLabel).join(" · "), "log");
+      const parts = states.filter((s) => s.running).map(progressLabel);
+      if (waitingCours && parts.length === 0) parts.push("En cours…");
+      setStatus(parts.join(" · ") || "En cours…", "log");
       if (!pollTimer) pollTimer = setInterval(fetchStatuses, 1500);
       return;
     }
@@ -164,14 +197,50 @@ function setupRefreshAllButton(controls) {
     const failed = states.filter((s) => s.exit_code != null && s.exit_code !== 0);
     if (failed.length) {
       setStatus(failed.map(progressLabel).join(" · "), "error");
-    } else if (states.length && states.every((s) => s.exit_code === 0)) {
+    } else if (armed || (states.length && states.every((s) => s.exit_code === 0))) {
       setStatus("Terminé ✓", "success");
     } else {
       setStatus("");
     }
+    armed = false;
+  }
+
+  async function startJob(ctrl) {
+    const resp = await fetch(ctrl.url, { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok && resp.status !== 409) {
+      throw new Error(data.error || ctrl.job);
+    }
+    ctrl.applyState(data);
+    return data;
+  }
+
+  async function launchPendingCours(states) {
+    const starts = [];
+    for (const [resultJob, coursJob] of Object.entries(coursApresResultats)) {
+      if (coursLaunched.has(coursJob)) continue;
+      const ctrl = byJob[coursJob];
+      if (!ctrl) continue;
+      const state = states.find((s) => s.job === resultJob);
+      if (state && state.running) seenRunning.add(resultJob);
+      const resultatsTermines = seenRunning.has(resultJob) && state && !state.running;
+      if (!resultatsTermines && !startFailed.has(resultJob)) continue;
+      coursLaunched.add(coursJob);
+      starts.push(
+        startJob(ctrl).catch((e) => {
+          coursLaunched.delete(coursJob);
+          throw e;
+        }),
+      );
+    }
+    if (!starts.length) return false;
+    await Promise.all(starts);
+    return true;
   }
 
   async function fetchStatuses() {
+    if (polling) return;
+    polling = true;
     try {
       const states = [];
       for (const ctrl of controls) {
@@ -180,6 +249,10 @@ function setupRefreshAllButton(controls) {
         const data = await resp.json();
         states.push(data);
         ctrl.applyState(data);
+      }
+      if (armed && (await launchPendingCours(states))) {
+        polling = false;
+        return fetchStatuses();
       }
       applySummary(states);
     } catch (e) {
@@ -190,28 +263,34 @@ function setupRefreshAllButton(controls) {
       button.disabled = false;
       button.classList.remove("running");
       setStatus(`Erreur: ${e.message}`, "error");
+      armed = false;
+    } finally {
+      polling = false;
     }
   }
 
   button.addEventListener("click", async () => {
     button.disabled = true;
+    armed = true;
+    seenRunning.clear();
+    startFailed.clear();
+    coursLaunched.clear();
     setStatus("Démarrage…");
     const errors = [];
-    for (const ctrl of controls) {
+    for (const ctrl of immediate) {
       try {
-        const resp = await fetch(ctrl.url, { method: "POST" });
-        const data = await resp.json();
-        if (!resp.ok && resp.status !== 409) {
-          errors.push(data.error || ctrl.job);
-          continue;
+        const data = await startJob(ctrl);
+        if (data.running && COURS_APRES_RESULTATS[ctrl.job]) {
+          seenRunning.add(ctrl.job);
         }
-        ctrl.applyState(data);
       } catch (e) {
         errors.push(e.message);
+        if (COURS_APRES_RESULTATS[ctrl.job]) startFailed.add(ctrl.job);
       }
     }
-    if (errors.length === controls.length) {
+    if (errors.length === immediate.length) {
       button.disabled = false;
+      armed = false;
       setStatus(`Erreur: ${errors[0]}`, "error");
       return;
     }
@@ -224,4 +303,16 @@ function setupRefreshAllButton(controls) {
   fetchStatuses();
 }
 
-setupRefreshAllButton(pricingControls);
+setupRefreshAllButton(
+  [
+    "pricing",
+    "pricing_us",
+    "pricing_etf",
+    "pricing_crypto",
+    "dividends",
+    "results",
+    "dividends_us",
+    "results_us",
+  ],
+  COURS_APRES_RESULTATS,
+);

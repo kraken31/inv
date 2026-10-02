@@ -323,7 +323,7 @@ Les jobs sont indépendants et lançables en parallèle depuis n’importe quel 
 
 | Bouton | Script | Effet |
 | --- | --- | --- |
-| ↻ Tous les cours | `get_pricing.py`, `get_pricing_us.py`, `get_pricing_etf.py`, `get_pricing_crypto.py` | Lance les téléchargements de cours en parallèle. Le statut résume l’avancement de chacun. |
+| ↻ Tous les cours | cours, dividendes et résultats Paris et US, plus les cours ETF et crypto | Lance dividendes et résultats Paris et US, les cours ETF et crypto, puis les cours Paris et US une fois les résultats du même marché terminés (le PER est recalculé avec ces comptes). |
 | ↻ Cours Paris | `get_pricing.py` | Dernier cours, capitalisation, PER, RSI pour **tous** les titres du référentiel actions. |
 | ↻ Cours US | `get_pricing_us.py` | Idem pour le S&P 500 (`stocksUS` → `pricingUS`). |
 | ↻ Dividendes US | `get_dividends_us.py` | Historique de dividendes du S&P 500, en dollars. |
