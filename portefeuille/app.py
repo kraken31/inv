@@ -1481,8 +1481,21 @@ def api_portefeuilles_crypto():
     return jsonify(rows)
 
 
-def _valuation_by_owner(conn, table: str, pricing: str) -> list[sqlite3.Row]:
-    """Valorisation actuelle (quantité × dernier cours) par propriétaire."""
+def _perf(current: float, purchase: float) -> float | None:
+    """Performance en %, hors dividendes : valorisation / coût d'achat."""
+    if purchase > 0:
+        return 100.0 * (current - purchase) / purchase
+    return None
+
+
+def _valuation_by_owner(
+    conn, table: str, pricing: str, purchase_sql: str
+) -> list[sqlite3.Row]:
+    """Valorisation actuelle et coût d'achat par propriétaire.
+
+    `purchase_sql` est un fragment SQL déjà figé (pas une saisie
+    utilisateur) : `w.quantity * w.price` ou `w.amount`.
+    """
     query = f"""
         WITH latest_price AS (
             SELECT p.id, p.price
@@ -1495,7 +1508,8 @@ def _valuation_by_owner(conn, table: str, pricing: str) -> list[sqlite3.Row]:
         )
         SELECT
             w.proprietaire AS proprietaire,
-            SUM(COALESCE(w.quantity * lp.price, 0)) AS amount
+            SUM(COALESCE(w.quantity * lp.price, 0)) AS amount,
+            SUM(COALESCE({purchase_sql}, 0)) AS purchase
         FROM {table} w
         LEFT JOIN latest_price lp ON lp.id = w.id
         WHERE w.proprietaire IS NOT NULL
@@ -1513,18 +1527,26 @@ def api_synthese():
     try:
         with get_db() as conn:
             sources = (
-                ("actions", "wallet", "pricing"),
-                ("etf", "walletETF", "pricingETF"),
-                ("crypto", "walletCrypto", "pricingCrypto"),
+                ("actions", "wallet", "pricing", "w.quantity * w.price"),
+                ("etf", "walletETF", "pricingETF", "w.quantity * w.price"),
+                ("crypto", "walletCrypto", "pricingCrypto", "w.amount"),
             )
-            buckets = {key: {} for key, _, _ in sources}
+            buckets = {key: {} for key, _, _, _ in sources}
             display = {}
-            for key, table, pricing in sources:
-                for row in _valuation_by_owner(conn, table, pricing):
+            for key, table, pricing, purchase_sql in sources:
+                for row in _valuation_by_owner(
+                    conn, table, pricing, purchase_sql
+                ):
                     name = row["proprietaire"]
                     fold = name.casefold()
                     display.setdefault(fold, name)
-                    buckets[key][fold] = float(row["amount"] or 0)
+                    current = float(row["amount"] or 0)
+                    purchase = float(row["purchase"] or 0)
+                    buckets[key][fold] = {
+                        "amount": current,
+                        "purchase": purchase,
+                        "perf": _perf(current, purchase),
+                    }
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
     except sqlite3.Error as exc:
@@ -1532,15 +1554,24 @@ def api_synthese():
 
     rows = []
     for fold in sorted(display, key=lambda k: display[k].casefold()):
-        actions = buckets["actions"].get(fold, 0.0)
-        etf = buckets["etf"].get(fold, 0.0)
-        crypto = buckets["crypto"].get(fold, 0.0)
+        empty = {"amount": 0.0, "purchase": 0.0, "perf": None}
+        actions = buckets["actions"].get(fold, empty)
+        etf = buckets["etf"].get(fold, empty)
+        crypto = buckets["crypto"].get(fold, empty)
+        total = actions["amount"] + etf["amount"] + crypto["amount"]
+        total_purchase = (
+            actions["purchase"] + etf["purchase"] + crypto["purchase"]
+        )
         rows.append({
             "proprietaire": display[fold],
-            "actions": actions,
-            "etf": etf,
-            "crypto": crypto,
-            "total": actions + etf + crypto,
+            "actions": actions["amount"],
+            "actions_perf": actions["perf"],
+            "etf": etf["amount"],
+            "etf_perf": etf["perf"],
+            "crypto": crypto["amount"],
+            "crypto_perf": crypto["perf"],
+            "total": total,
+            "total_perf": _perf(total, total_purchase),
         })
     return jsonify(rows)
 

@@ -804,7 +804,7 @@ dialog.modal::backdrop {
 
 .pie-legend-item {
   display: grid;
-  grid-template-columns: 12px 1fr auto auto;
+  grid-template-columns: 12px 1fr auto auto auto;
   gap: 8px;
   align-items: center;
   font-size: 14px;
@@ -842,7 +842,17 @@ a.pie-legend-item:focus {
   text-align: right;
 }
 
+.pie-perf {
+  min-width: 64px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .pie-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
   margin: 14px 0 0;
   padding-top: 12px;
   border-top: 1px solid var(--border);

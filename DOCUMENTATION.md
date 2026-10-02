@@ -137,6 +137,8 @@ Un camembert par propriétaire, regroupé sur le même nom dans les portefeuille
 
 Chaque part est la **valorisation actuelle** (quantité × dernier cours), hors liquidité et hors dividendes. Les trois catégories sont toujours listées ; une part nulle n’apparaît pas dans le graphique et n’est pas cliquable. Le total est la somme des trois valorisations.
 
+La **performance** de chaque portefeuille (actions, ETF, crypto) et du total est la même que sur l’écran du portefeuille : `100 × (valorisation − coût d’achat) / coût d’achat`, hors dividendes et hors liquidité. Elle est vide s’il n’y a pas de coût d’achat.
+
 Un clic sur une part ou sur sa ligne de légende ouvre le portefeuille correspondant : actions (`/?proprietaire=…`), ETF (`/portefeuille-etf?proprietaire=…`) ou crypto (`/portefeuille-crypto?proprietaire=…`).
 
 ### 4.2 Portefeuille (`/`)

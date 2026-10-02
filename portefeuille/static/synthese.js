@@ -10,6 +10,11 @@ const nfPct = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
+const nfPerf = new Intl.NumberFormat("fr-FR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  signDisplay: "exceptZero",
+});
 
 const SLICES = [
   { key: "actions", label: "Actions", color: "#38bdf8" },
@@ -75,6 +80,15 @@ function pieMarkup(parts, owner) {
   return `<svg class="pie" viewBox="0 0 200 200" role="img">${paths.join("")}</svg>`;
 }
 
+function perfMarkup(value) {
+  if (value == null || Number.isNaN(Number(value))) {
+    return '<span class="pie-perf"></span>';
+  }
+  const n = Number(value);
+  const cls = n > 0 ? "pos" : n < 0 ? "neg" : "";
+  return `<span class="pie-perf ${cls}">${nfPerf.format(n)}\u00A0%</span>`;
+}
+
 function legendMarkup(parts, total, owner) {
   return parts.map((part) => {
     const pct = total > 0 ? (100 * part.amount) / total : 0;
@@ -83,7 +97,8 @@ function legendMarkup(parts, total, owner) {
       <span class="swatch" style="background:${part.color}"></span>
       <span class="pie-label">${escapeHtml(part.label)}</span>
       <span class="pie-amount">${nfEur.format(part.amount)}</span>
-      <span class="pie-pct">${nfPct.format(pct)}\u00A0%</span>`;
+      <span class="pie-pct">${nfPct.format(pct)}\u00A0%</span>
+      ${perfMarkup(part.perf)}`;
     if (part.amount <= 0) {
       return `<li><span class="pie-legend-item${muted}">${inner}</span></li>`;
     }
@@ -103,6 +118,7 @@ function render(rows) {
     const parts = SLICES.map((slice) => ({
       ...slice,
       amount: Number(row[slice.key]) || 0,
+      perf: row[`${slice.key}_perf`],
     }));
     const total = Number(row.total) || 0;
     const card = document.createElement("article");
@@ -111,7 +127,10 @@ function render(rows) {
       <h2 class="page-subtitle">${escapeHtml(row.proprietaire)}</h2>
       ${pieMarkup(parts, row.proprietaire)}
       <ul class="pie-legend">${legendMarkup(parts, total, row.proprietaire)}</ul>
-      <p class="pie-total">Total ${nfEur.format(total)}</p>
+      <p class="pie-total">
+        <span>Total ${nfEur.format(total)}</span>
+        ${perfMarkup(row.total_perf)}
+      </p>
     `;
     root.appendChild(card);
   }
